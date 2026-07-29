@@ -1,0 +1,3 @@
+id,noise_site_id,conductor,grease,conductor_and_treatment,reconductoring_date,plot_linestyle,notes
+1,51,,standard,Standard conductor (standard grease),2024-11-15,solid,Initial reconductoring
+2,115,,low-noise,Low-noise conductor (low-noise grease),2025-02-01,dash,Follow-up treatment

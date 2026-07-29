@@ -1,0 +1,238 @@
+# Project Context for Claude Code
+
+This file gives persistent context for Claude Code sessions in this repository. It was transferred from a prior planning/implementation session in a different tool (GitHub Copilot Chat in VS Code). Read this before making changes.
+
+## What this repo is
+
+`transpower-conductor-noise-tool-2026` is a from-scratch rebuild of the sibling repo `transpower-conductor-noise-tool` (one level up, at `../transpower-conductor-noise-tool`). The original app is a Flask + Dash monolith that:
+- ingests noise/tonality readings from a third-party API (Noise and Weather API)
+- processes and stores them in a database (MySQL in prod, SQLite for local dev)
+- serves a Dash UI with tabs (Charts, Sites, Outages, Reconductoring, Historical, Trends, Locations) that queries and displays that data
+
+The original repo is being kept untouched as a reference. It is NOT a dependency of this repo — do not import from it. Read it only to port logic/behavior.
+
+**This repo has no git history — it is not a git repository at all** (confirmed via `git status` → "not a git repository"). Every change made across every slice so far exists only on disk, with no commits, no diff-based review, and no easy revert. If a future session wants to check "what changed in slice X," there is no `git log`/`git blame` to consult — this file's per-slice write-ups in "Current status" below are the only record. If the user ever wants version control, `git init` is a reasonable first move, but don't do it unprompted — treat destructive filesystem operations (deleting/overwriting files) with extra care here, since there is no commit to fall back on.
+
+## Why this repo exists (goal)
+
+Separate the system into clear layers so ingestion/processing/persistence can evolve independently from the UI:
+- `backend/`: ingestion, processing, persistence (SQLAlchemy models + repositories), domain services, API routes
+- `frontend/`: Dash layout + callbacks only — must depend on API contracts, never on ORM models or ingestion code directly
+- `shared/`: Pydantic contracts (DTOs) used by both sides
+- `alembic/`: schema migrations, tied to the backend persistence boundary
+
+Working principle: frontend code should never import ORM models or ingestion modules. It talks to backend HTTP endpoints via a thin client wrapper (`frontend/client.py`), which returns shared contract objects.
+
+## Repo layout
+
+```text
+src/transpower_conductor_noise_tool_2026/
+  backend/
+    api/            # Flask blueprint(s) + routes; auth_guard.py (require_write_access decorator)
+    domain/         # site_service.py, auth_service.py, chart_service.py, processing_service.py (pure Reading -> ProcessedReading pandas transform)
+    ingestion/      # nw_client.py (Noise and Weather API connector), ingestion_job.py (orchestrator), ingest_cli.py (entrypoint)
+    persistence/
+      models/       # SQLAlchemy ORM models (Site, User, ProcessedReading, Reading, Outage, OutageType, Reconductoring)
+      repositories/ # repository-pattern data access — one per model, plus find_by_id/save/add/delete method shapes as each tab needed them
+      seed.py       # CSV-based demo data seeding
+      seed_cli.py   # entrypoint used by db-migrate container
+    app.py          # Flask app factory
+    config.py       # Settings incl. AUTO_INIT_DB / AUTO_SEED_DATA / SECRET_KEY / *_FIXTURE_PATH / NW_* flags
+    extensions.py   # db = SQLAlchemy(); also enables SQLite FK enforcement (off by default in SQLite, on in the real MySQL deployment)
+  frontend/
+    app.py          # Dash app factory (create_dashboard) + plain /login, /logout routes + dcc.Location auth gate + dbc.Tabs(Charts, Sites, Outages, Reconductoring)
+    client.py       # BackendClient — HTTP wrapper the frontend uses instead of ORM
+    callbacks/      # sites.py, charts.py, outages.py, reconductoring.py (add/edit/delete via diff-against-server-truth on Save)
+    layout/         # charts.py, sites.py, outages.py (dropdown-backed outage_type), reconductoring.py
+  shared/
+    contracts.py    # Pydantic DTOs — Site*, ChartFilters/ChartsResponse, UserSummary, Outage*, Reconductoring*
+alembic/
+  env.py            # wired to real SQLAlchemy metadata, online mode works
+  versions/
+    0001_create_site_table.py
+    0002_create_user_table.py
+    0003_create_processed_reading_table.py
+    0004_create_reading_table.py
+    0005_create_outage_tables.py
+    0006_create_reconductoring.py
+tests/
+  test_health.py
+  test_sites.py
+  test_auth.py
+  test_charts.py
+  test_processing_service.py
+  test_nw_client.py
+  test_ingestion_job.py
+  test_site_updates.py
+  test_outages.py
+  test_reconductoring.py
+docker-compose.yml   # db, db-migrate, web, ingest (profile: ingestion), optional nginx (profile: prodlike)
+Dockerfile           # web image (gunicorn)
+docker/Dockerfile.migrate  # migration-only image, also reused (different command) for the `ingest` service
+data/site.csv               # trimmed demo fixture (20 rows) used for seeding
+data/user.csv                # demo user fixture (1 row) used for seeding — dev-only credentials, see README
+data/processed_reading.csv   # synthetic demo fixture (829 rows, staggered per-site date ranges) — real ingestion now exists (Slice B) but isn't wired to run automatically; this fixture is still what populates the demo/dev DB
+data/outage_type.csv         # fixed lookup values (monitoring, line) — matches old repo's real seed exactly
+data/outage.csv               # a few demo outage rows
+data/reconductoring.csv       # a few demo reconductoring-event rows
+```
+
+## Current status (as of 2026-07-29)
+
+### Done and verified
+- Repo skeleton: Poetry packaging, Dockerfile, docker-compose, Alembic scaffold, tests folder.
+- Vertical slice — **Site listing** — proven end to end:
+  `Site` ORM model → `SiteRepository` → `site_service.list_site_summaries()` → `/api/sites` route → `SiteSummary`/`SiteListResponse` contracts → `BackendClient.get_sites()` → Dash callback in `frontend/callbacks/sites.py`.
+  This is the reference pattern replicated for auth below and to replicate for every other feature.
+- **Slice A (auth/login) DONE.** `User` ORM model → `UserRepository` → `backend/domain/auth_service.py` (`authenticate`/`create_user`/`get_user_by_id`, `werkzeug.security` password hashing) → `/api/auth/login`, `/api/auth/logout`, `/api/auth/me` (`backend/api/auth_routes.py`, its own blueprint alongside `api_bp`) → `UserSummary` contract → `BackendClient.login()`/`.logout()`/`.get_current_user()` → plain Flask `/login` and `/logout` routes registered directly on the shared server in `frontend/app.py` (not Dash callbacks, so they can set/relay the `Set-Cookie` header) → Dash layout is now `dcc.Location` + `page-content`, gated by a callback that calls `BackendClient.get_current_user()` and redirects to `/login` when there's no valid session.
+  - Deliberately **modernized rather than ported verbatim**: uses Flask's built-in signed `session` (no new dependency) instead of the old repo's hand-rolled hardcoded-pepper cookie scheme, and `werkzeug.security` password hashing instead of `passlib`/`sha512_crypt`. Old repo's `write_access` boolean field carried over on `User` but not yet enforced anywhere (no write-gated features exist yet).
+  - The old repo's dashboard-gating callback had a "temporarily bypass authentication for debugging" fallback that always rendered the dashboard — **not ported**; this repo's gate actually redirects to `/login` when unauthenticated.
+  - Demo user only (no real-account migration) — seeded via `data/user.csv` → `seed_users_from_csv`, credentials in `README.md`.
+- **Slice C (ProcessedReading + Charts tab) DONE, MVP scope.** `ProcessedReading` ORM model (FK'd to `site.noise_site_id`; no FK to a `Reading` table since that model hasn't been ported) → `ProcessedReadingRepository.list_readings(site_ids, start_datetime, end_datetime, is_wet)` → `backend/domain/chart_service.py` (`get_chart_figures`, builds two `plotly.graph_objects` figures — a per-site time-series line chart and the data-availability timeline chart ported from the old repo's `chart_service.py::generate_timeline_figure`) → `POST /api/charts` (`backend/api/chart_routes.py`, its own blueprint, takes the extended `ChartFilters` contract, returns `ChartsResponse`) → `BackendClient.get_charts()` → `frontend/layout/charts.py` (filter panel: site multi-select, date range, condition, parameter) + `frontend/callbacks/charts.py` → both `dcc.Graph`s render inside a new "Charts" tab, with the existing site-list content moved into a sibling "Sites" tab (`dbc.Tabs` now wraps the authenticated dashboard content in `frontend/app.py`).
+  - **Scope was explicitly narrowed** (user-confirmed 2026-07-28): both charts are built, but the old repo's collapsible editable raw-data table and the two CSV export links are **not ported** — those are `write_access`-gated secondary features, not the chart value itself, and are deferred to a later pass alongside Slice D.
+  - Also **not ported**: the "days since conductoring" plot-by mode, and the conductor/treatment/grease filter dropdowns — both depend on `Reconductoring`/`Outage` data that hasn't been ported yet. `condition` only supports `all`/`wet`/`dry` (matches old app's valid values; `is_wet` boolean is the only signal, there's no separate `condition` column).
+  - No real ingestion exists yet, so `ProcessedReading` is seeded from a **synthetic, deterministically-generated** fixture (`data/processed_reading.csv`, seed `20260728`) — one random-length date range (20–75 days) per demo site, staggered start dates, so the timeline chart has a visually meaningful spread. Regenerate via the (unsaved, one-off) script used to build it if the shape ever needs to change — it's not part of the repo, just plain synthetic-data generation with a fixed seed for reproducibility.
+  - Plotly figures are returned from the API as fully JSON-safe dicts via `json.loads(plotly.io.to_json(figure))`, **not** `figure.to_dict()` — `to_dict()` leaves numpy arrays / pandas `Timestamp`s in the structure, which Flask's stdlib-based `jsonify` cannot serialize (hit and fixed this while building the slice).
+  - Added `plotly` as an explicit direct dependency in `pyproject.toml` (`>=5.22.0`, no upper bound) — it was previously only available transitively via `dash`, but `backend/domain/chart_service.py` imports it directly, and pinning a caret range risked conflicting with whatever `dash` resolves.
+- **Slice B (ingestion + processing pipeline) DONE.** `backend/ingestion/nw_client.py::NoiseAndWeatherClient` (ported from the old repo's `application/infrastructure/nw.py` — token auth via `POST /authenticate` + `x-access-token` header, paginated `GET /events/...`) → `backend/domain/processing_service.py` (pure pandas functions: `rename_raw_columns`, `clean_readings`, `process_readings` — ported verbatim from the old repo's `processing_service.py` column-derivation/filter logic) → `backend/ingestion/ingestion_job.py::collect_new_readings` (orchestrator: per known, non-ignored site, fetch since the latest stored `Reading.datetime` (or `2016-01-01` default), upsert into `Reading`, run `process_readings`, append into `ProcessedReading`) → `backend/ingestion/ingest_cli.py` (CLI entrypoint) → `docker-compose.yml`'s `ingest` service (profile `ingestion`, opt-in only — `docker compose --profile ingestion run --rm ingest`).
+  - **Built and verified entirely against mocked HTTP responses, per your explicit choice** — no real `NW_USERNAME`/`NW_PASSWORD` credentials were requested or used, and no live call to `api.noiseandweather.com` was made. If you later have real credentials, set `NW_USERNAME`/`NW_PASSWORD` and run the `ingest` service; nothing else needs to change.
+  - New `Reading` ORM model (composite PK `(noise_site_id, datetime)`, FK'd to `site.noise_site_id`) — the raw-readings table `ProcessedReading` was missing since Slice C. **Deliberately simplified vs. the old repo**: `ProcessedReading` still FKs directly to `Site` (from Slice C), not to `Reading` via the old repo's composite FK — decided not to add that extra referential-integrity link since processing doesn't actually query back through it (old app operates on the same in-memory fetch batch for both tables, never re-queries `Reading`), so it wasn't worth the extra migration churn on an already-shipped table.
+  - **Correctness fix over the old app**: `ReadingRepository.upsert_readings` uses `db.session.merge()` (keyed on the composite PK) instead of the old app's plain `df.to_sql(..., if_exists="append")`, which raised an uncaught `IntegrityError` (silently dropping that site's entire batch, caught only by a broad per-site `try/except`) if a re-run ever fetched an overlapping window. `ProcessedReading` writes are still plain appends (matches old app — re-running over the exact same window will duplicate `ProcessedReading` rows; this is a known, inherited limitation, not something newly introduced).
+  - **Deliberately not ported**: auto-creating a `Site` row for a site the external API knows about but the local DB doesn't — the old app did this (`upload_site_details`), but its exact field mapping from the API's site payload wasn't confirmed during research, and fabricating it risked silently wrong data. Sites unknown locally are now just skipped (reported in the job summary as `{"skipped": "site not known locally"}`); add them via the existing `data/site.csv` seeding path first if ingestion needs to cover them. Also not ported: the old app's interactive `input()` prompt fallback for missing credentials (would hang forever in a non-interactive container) — replaced with an immediate `LoginError`.
+  - `IGNORE_SITES` (a hardcoded set of site IDs to skip) is carried over verbatim from the old app's operational exclusion list — real curated data, not a placeholder.
+  - Also fixed two incidental bugs surfaced while building this: `pandas.DataFrame.between_time`'s `include_start`/`include_end` kwargs were removed in newer pandas (this repo resolves pandas 2.3.x from its `^2.2.2` constraint) in favour of a single `inclusive=` argument — `processing_service._filter_by_time` updated accordingly. And `Settings.SQLALCHEMY_DATABASE_URI` being a class attribute evaluated once at import time meant `monkeypatch.setenv("DATABASE_URL", ...)` in tests never actually took effect after the first test in a pytest session imported `Settings` — every prior test was silently sharing the same default sqlite file rather than an isolated tmp DB. Fixed in `backend/app.py::create_app()` by re-reading `DATABASE_URL` from the environment at app-creation time instead of relying on the stale class attribute. This was a pre-existing bug (not introduced by this slice) but two of this slice's tests exposed it, so it's fixed now — all earlier tests' "isolated tmp db" intent now actually works.
+- **Slice D, part 1 (Sites tab CRUD + first real `write_access` enforcement) DONE.** `SiteRepository.find_by_noise_site_id`/`.save()` → `site_service.list_site_details()`/`update_site_fields()` → `GET /api/sites/detail` (full `SiteDetail` — all `Site` columns, vs. the existing lightweight `SiteSummary` used only by the Charts-tab site dropdown) and `PATCH /api/sites/<noise_site_id>` (body validated as `SiteUpdate`, guarded by the new `@require_write_access` decorator in `backend/api/auth_guard.py`) → `BackendClient.get_site_details()`/`.update_site()` → `frontend/layout/sites.py` (an editable `dash_table.DataTable`, columns gated per-cell by `write_access`) + `frontend/callbacks/sites.py` (table refresh chained after save completes, not racing it — see gotcha below) — the Sites tab is no longer a read-only placeholder.
+  - **Scope matches the old app's actual behavior, not the "CRUD" shorthand used in earlier planning notes**: the old repo's Sites tab is **edit-only** — `noise_site_id` and `site_name` are permanently read-only even with `write_access`; the other five columns (`site_code`, `plot_color`, `height_adj_db`, `data_folder`, `report_folder`) are editable. There is no add-row or delete-row flow anywhere in the old app's Sites tab (new sites only ever arrive via bulk CSV import) — not ported, since it would be inventing a feature the old app never had, not porting one.
+  - **Real security fix over the old app**: the old repo's `write_access` gating was **entirely client-side** (hidden Save button, non-editable DataTable columns baked into the initial render) — nothing in its `sites_tab_callbacks.py` re-checked `write_access` server-side, so a crafted request to its own callback endpoint could edit a site regardless of permission. The new `PATCH /api/sites/<id>` enforces `write_access` in the backend itself via `@require_write_access` (401 if not authenticated, 403 if authenticated but `write_access=False`) — confirmed by `test_update_site_requires_write_access`. The frontend still hides the Save button / locks columns for read-only users too, but that's now just UX, not the actual security boundary.
+  - `plot_color` validation deliberately simplified vs. the old app: old repo validated via Plotly's `validate_colors` helper (accepts any Plotly-recognized color name/string, not just hex, despite its own error message saying "use hex style colors"); new repo validates with a strict `^#[0-9a-fA-F]{6}$` regex instead, matching what the `String(7)` DB column actually constrains to in practice, and avoiding a dependency on Plotly's internal color-name validator.
+- **Slice D, part 2 (Outages + Reconductoring tabs, real add/edit/delete) DONE.** Two new models/tabs, both genuinely add/edit/delete-capable (unlike Sites, which is edit-only) — `Outage`/`OutageType` (`backend/persistence/models/outage.py`, `outage_type.py`) and `Reconductoring` (`backend/persistence/models/reconductoring.py`) → `OutageRepository`/`ReconductoringRepository` (new method shapes vs. Sites: `find_by_id`/`add`/`save`/`delete`, since these tabs need real create+delete, not just field-patching) → `outage_service.py`/`reconductoring_service.py` → REST endpoints (`backend/api/outage_routes.py`: `GET/POST /api/outages`, `PATCH`/`DELETE /api/outages/<id>`, `GET /api/outages/types`; `backend/api/reconductoring_routes.py`: same shape) → `BackendClient` methods → `frontend/layout/outages.py` + `.../reconductoring.py` (editable+addable+deletable `dash_table.DataTable`s, whole-table `write_access` gating — matches the old app's Outages/Reconductoring pattern, not the Sites tab's per-column one) → `frontend/callbacks/outages.py` + `.../reconductoring.py`.
+  - **API design deliberately diverges from the old app's mechanism, not just its endpoints**: the old repo's Save button posted the *entire table* to one Dash callback, which diffed it against a fresh DB query server-side (`update_database_rows`) to infer adds/updates/deletes. The new repo instead exposes proper per-row REST endpoints (`POST`/`PATCH`/`DELETE`), and the **frontend** does the diffing (fetch current server state, compare against the submitted table, issue the right calls per row) inside `save_outages`/`save_reconductoring`. Same end-user capability and UX (editable bulk table + one Save button), but the diff logic lives in the presentation layer calling a normal REST API, not baked into a generic bulk-sync backend function — this fits the layered architecture better and was a natural fit now that the API boundary is real, not a monolith.
+  - **Bug fix, not a port**: the old repo's `Reconductoring` model has a composite primary key `(noise_site_id, conductor)`, even though `conductor` is never set by its own UI (always blank) — a second reconductoring event for the same site collides on that key. The old app's own add/delete-diffing logic already treated `id` as the row's real identity everywhere; the new model just makes that the actual DB primary key instead. `conductor` is kept as a plain nullable column for schema fidelity, just no longer part of the key.
+  - **Validation gap closed**: the old app had no check that `end_datetime > start_datetime` on `Outage` (an old data-integrity gap, not a designed "open-ended outage" feature — `end_datetime` is DB-`nullable=False`, so a null attempt would've just crashed with a raw `IntegrityError`). New `OutageCreate`/`OutageUpdate` validate the ordering when both fields are present.
+  - `outage_type` is a real Dash dropdown backed by `GET /api/outages/types` (2 seeded values: `monitoring`, `line`, matching the old repo's actual `data/outage_type.csv` exactly — not the "Maintenance"/"Sensor fault" style values assumed before checking), instead of the old app's free-text cell that only got validated by an ugly raw FK error on save. An unknown `outage_type` (or unknown `noise_site_id`) submitted directly via the API still gets a clean 400, not a 500 — caught via `sqlalchemy.exc.IntegrityError` around the create/update calls (SQLite doesn't enforce FKs by default, unlike the real MySQL deployment — see gotcha below, this needed a real fix to even test).
+  - Reconductoring's `conductor` and `plot_linestyle` columns (present on the model for fidelity) are intentionally **not exposed** via `ReconductoringCreate`/`Update`/`Detail` — the old UI never showed or edited them either (`conductor_and_treatment` is the real display/filter field).
+- Alembic online migrations wired to real SQLAlchemy metadata (`db.metadata` via `backend/extensions.py`), verified working in Docker (`db` → `db-migrate` → `web`), now at revision `0006_create_reconductoring`.
+- Docker deployment-like stack verified: `docker compose up --build db db-migrate web` — db healthcheck gates migration, migration gates web startup, migration is idempotent seed (`*.query.count()` guards on every seeded table). The `ingest` service is confirmed **excluded** from the default `up` (only appears via `--profile ingestion`), and running it explicitly without `NW_USERNAME`/`NW_PASSWORD` set fails fast with a clear `LoginError` rather than hanging or crashing obscurely.
+- Smoke-tested: `/api/health` ok; `/api/sites` returns seeded rows; full auth flow (`/login` GET/POST, `/api/auth/me`, `/logout`) verified against the running `docker compose` stack, including the browser-facing cookie relay; `POST /api/charts` verified with no filters, a single-site filter, and a `condition`/`parameter` combination; `GET /api/sites/detail` and `PATCH /api/sites/<id>` verified (unauthenticated → 401, invalid color → 400); `/api/outages` and `/api/reconductoring` (list/create/types) verified against the live stack; all four tabs' Dash callbacks (Charts, Sites, Outages, Reconductoring) verified by directly POSTing to `/app/_dash-update-component` with a real session cookie — see the gotcha below about that endpoint's request shape — including a full Outages create-via-Dash-callback round trip confirmed by re-fetching `/api/outages` afterward, and confirming the delete-diff logic actually deletes rows absent from the submitted table state.
+- 50 backend tests passing (`test_health.py`, `test_sites.py`, `test_auth.py`, `test_charts.py`, `test_processing_service.py`, `test_nw_client.py`, `test_ingestion_job.py`, `test_site_updates.py`, `test_outages.py`, `test_reconductoring.py`).
+
+### Known gotchas already hit — don't repeat them
+- `.dockerignore` originally excluded `alembic/versions/`, which silently made `alembic upgrade head` a no-op in the migrate container (no error, just nothing to apply). Migration versions must be included in the build context. Already fixed — verify `.dockerignore` doesn't reintroduce this if you touch it.
+- `backend/config.py`'s `ROOT_DIR` was computed as `Path(__file__).resolve().parents[4]`, which is one level *above* the actual repo root (fine in the real Docker deployment since `SITE_FIXTURE_PATH`/`DATABASE_URL` are always overridden by env vars there, but it silently broke the default fallback paths used by local/bare `pytest` runs). Fixed to `parents[3]`. If you add a new `*_FIXTURE_PATH`-style setting, remember to also add its env var override to **both** the `db-migrate` and `web` service blocks in `docker-compose.yml` (easy to forget — caught this exact miss for `USER_FIXTURE_PATH` while building the auth slice).
+- This project has no local venv/poetry install available in the dev environment used so far — tests and `docker compose` smoke tests were run inside ad hoc `python:3.11-slim` containers (`pip install -e . pytest`) and the real `docker compose up --build db db-migrate web` stack, not bare `pytest` on the host.
+- MySQL's default `alembic_version.version_num` column is `VARCHAR(32)`. A revision id longer than that (e.g. the first attempt at `0003_create_processed_reading_table`, 36 chars) makes the migration's `CREATE TABLE`/DDL succeed (MySQL DDL auto-commits, so it's *not* rolled back) but then fail on the version-stamp `UPDATE` — leaving the DB in a half-migrated state (table exists, `alembic_version` still at the previous revision) that a naive retry can't recover from cleanly. Keep new revision ids short (the fix was renaming to `0003_create_processed_reading`). If you ever hit this, the simplest recovery for the local dev volume is `docker compose down -v` (it's disposable seed data) rather than hand-editing `alembic_version`.
+- A fresh (empty) `mysql_2026_data` volume can make `db-migrate` fail its very first connection attempt with `Connection refused` even though `db`'s healthcheck already reported healthy — MySQL's container entrypoint does an internal restart after first-time data-directory initialization, and the healthcheck can catch the brief in-between window. Re-running `docker compose up db-migrate` a few seconds later (once `db` has truly settled) resolves it; this only happens on a brand-new volume, not on subsequent runs.
+- The Dash `/app/_dash-update-component` endpoint's expected JSON request shape depends on the Dash version and on whether a callback has one output vs. several: for a single-`Output` callback on this repo's Dash 2.18.2, the request needs `"outputs"` as a single `{"id":..., "property":...}` **dict** (not a list — a list `"outputs"` is interpreted as a multi-output/wildcard callback and raises `InvalidCallbackReturnValue` even though the callback itself is registered correctly). Useful if you ever need to curl a callback directly instead of driving it through a real browser.
+- `Settings.SQLALCHEMY_DATABASE_URI` was a class attribute evaluated once at import time — see the Slice B entry above. Fixed in `create_app()`. If you ever add another `Settings` attribute that a test needs to override via `monkeypatch.setenv(...)` *after* `Settings` may already have been imported elsewhere in the process, it needs the same treatment (re-read the env var inside `create_app()`, don't rely solely on the class attribute).
+- `pandas.DataFrame.between_time`'s `include_start`/`include_end` boolean kwargs (used by the old repo) don't exist in the pandas version this repo currently resolves (2.3.x, from the `pandas = "^2.2.2"` constraint) — use `inclusive="both"/"neither"/"left"/"right"` instead. Worth checking for if you port any other old-repo pandas code verbatim; APIs may have shifted.
+- A Pydantic v2 `ValidationError` from a custom `@field_validator` that raises a plain `ValueError` isn't directly JSON-serializable via `exc.errors()` — the `ctx` key in each error dict contains the raw `ValueError` object itself, and `jsonify()` chokes on it. Use `exc.errors(include_context=False)` when returning validation errors as JSON (see `backend/api/routes.py::update_site`). `backend/api/chart_routes.py`'s `ChartFilters` validation happens not to hit this today (no custom validators raising `ValueError` there), but the same fix would be needed if one's ever added.
+- Don't wire two Dash callbacks to fire off the *same* Input when one's result needs to happen strictly after the other (e.g. "refresh the table" and "save the table" both listening to a button's `n_clicks`) — Dash doesn't guarantee their relative execution order, so a table refresh can race a save and briefly show stale data. Chain them instead: make the refresh's Input the *save callback's own Output* (e.g. `Input("sites-status", "children")`, which only changes once `save_sites` finishes), so the dependency graph enforces the ordering. See `frontend/callbacks/sites.py`.
+- SQLite does **not** enforce `FOREIGN KEY` constraints unless you explicitly turn it on per connection (`PRAGMA foreign_keys=ON`) — the real deployment (MySQL) enforces them by default, so this was a real divergence between the test DB and production behavior, not just a pedantic detail: a test asserting an FK violation returns 400 was silently getting 201 instead, because SQLite just let the bad insert through. Fixed globally via a SQLAlchemy `Engine, "connect"` event listener in `backend/extensions.py` that runs the pragma for any sqlite3 connection. If you add more FK-constrained models, their invalid-reference tests will now correctly fail without this fix being redone.
+- Flask's default `jsonify()` serializes raw `datetime.datetime`/`datetime.date` objects using **HTTP-date format** (`"Fri, 01 Aug 2025 00:00:00 GMT"`, via `werkzeug.http.http_date`), not ISO 8601 — and a client-side `pydantic` model expecting an ISO datetime string will fail to parse it back. This didn't surface until `Outage`/`Reconductoring` (the first DTOs with raw `datetime`/`date` fields returned directly in a JSON response — `ProcessedReading` chart data goes through a separate Plotly JSON encoder, and `Site`/`User` have no date fields). Fix: call `.model_dump(mode="json")` (not bare `.model_dump()`) on any Pydantic model with date/datetime fields before `jsonify()`-ing it — Pydantic's `mode="json"` converts them to ISO strings itself, so Flask's encoder never has to touch them. Check any *new* DTO with date/datetime/Decimal fields for this before assuming plain `.model_dump()` is fine.
+- **Dev environment quirks (Windows host, Git Bash tool) that cost time repeatedly across slices** — not app bugs, just friction worth not rediscovering:
+  - `docker run`/`docker compose` commands that include a bind-mount path (`-v "$(pwd):/app"`) get mangled by Git Bash's automatic POSIX-to-Windows path conversion (e.g. `-w /app` silently becomes a bogus Windows path). Prefix the command with `MSYS_NO_PATHCONV=1` to disable that conversion — used throughout this session for every ad hoc `python:3.11-slim` container run.
+  - `/tmp` is not a reliably writable/readable path from this Bash tool on this Windows host — `curl -o /tmp/foo.json` followed by `python -c "open('/tmp/foo.json')"` intermittently fails with `FileNotFoundError`. Use the session's scratchpad directory (an absolute Windows path under `AppData\Local\Temp\claude\...\scratchpad`) for any file curl/python needs to write and then read back, e.g. when inspecting a JSON API response or generating a seed CSV.
+  - No local Python venv/Poetry install is available in this dev environment — every `pytest` run and every dependency install happens inside a throwaway `python:3.11-slim` container (`docker run --rm -v "$(pwd):/app" -w /app python:3.11-slim bash -c "pip install -e . pytest && python -m pytest tests/ -v"`), not on the host directly. See "How to run / verify locally" below for the exact command used throughout.
+
+### Not started yet
+- Ingestion has been built (Slice B) but **never run against the real Noise and Weather API** — only against mocked HTTP responses, per your explicit choice. First real run should be treated as a trial: verify the actual API response field names match `processing_service.RAW_COLUMN_MAP`/`nw_client`'s assumptions (ported from the old repo's source, not independently re-verified against the live API), and consider a smaller `DEFAULT_START_DATETIME` than the inherited `2016-01-01` before pointing this at a site with years of history.
+- Ingestion doesn't auto-create local `Site` rows for sites the API knows about but the DB doesn't (deliberately not ported — see Slice B entry above). Any real site must exist in `data/site.csv`/the `site` table before ingestion will touch it.
+- No scheduling for the `ingest` service — it's a manually-triggered one-shot (`docker compose --profile ingestion run --rm ingest`), matching the old app (which relied on an uncommitted external cron entry). No APScheduler/Celery/cron-sidecar has been added.
+- 7 of ~8 ORM models now ported (`Site`, `User`, `ProcessedReading`, `Reading`, `Outage`, `OutageType`, `Reconductoring`). Missing: `HistoricalResult` — blocks real data for the Historical tab.
+- Charts tab is still MVP-scoped: no collapsible/editable raw-data table, no CSV export links, no "days since conductoring" plot mode, no conductor/treatment/grease filters, no weekly-aggregation bucketing (`interval_weeks` from the old app was dropped — the new chart plots raw per-reading points, not aggregated buckets). See the Slice C entry above for the full list and why. `write_access` now exists and is enforced server-side (Slice D), and the add/edit/delete REST pattern now exists too (Outages/Reconductoring), so this deferred table/edit/export work is no longer blocked on anything architectural — it's just not built yet, and is the most self-contained remaining Slice D item (no new ORM models needed).
+- Frontend now has four of the old app's seven tabs (Charts, Sites, Outages, Reconductoring) behind the auth gate. Historical, Trends, Locations remain unported.
+- Sites tab is edit-only, matching the old app — no add-site or delete-site flow (see Slice D part 1 entry above; new sites still only arrive via `data/site.csv` seeding). Outages and Reconductoring, by contrast, are now genuinely add/edit/delete-capable, matching what the old app actually supported for those two tabs.
+- No downloads/export logic ported anywhere (`application/infrastructure/download.py` equivalent missing — CSV export of chart/table data). None of the four ported tabs have an export link (the old app's Sites/Outages/Reconductoring tabs all did — not part of what's been scoped in yet; flag if that's wanted).
+- `write_access` enforcement (`backend/api/auth_guard.py::require_write_access`) is now applied consistently to every write endpoint that exists (`PATCH /api/sites/<id>`, `POST`/`PATCH`/`DELETE /api/outages`, `POST`/`PATCH`/`DELETE /api/reconductoring`) — keep using the same decorator for any future write endpoint rather than re-deriving the check.
+- `HistoricalResult` (needed for the Historical tab) pulls in the `AGGREGATION_DATE`/pre-2016 backfill logic noted during the Slice C exploration — not yet investigated in any depth.
+- No frontend tests. No repository-level unit tests independent of Flask app context for most modules (auth/sites/charts/outages/reconductoring tests all boot a full Flask app via `create_app()`; the ingestion tests are the only ones to unit-test below that level — `test_processing_service.py` and `test_nw_client.py` need no Flask app at all). The Sites/Outages/Reconductoring tabs' Dash callbacks were all verified manually against a running `docker compose` stack, not via an automated test — same gap as the Charts tab.
+
+## Locked sequencing decision (confirmed 2026-07-28) — do not relitigate without a reason
+
+Order: **A → C → B → D → E**
+
+- **A. Auth/login slice** — the original app gates all UI behind login; without some equivalent, later frontend ports can't be demoed faithfully to how the real app behaves. **Do this first. DONE (2026-07-28).**
+- **C. `ProcessedReading` model + chart data API + Charts tab frontend** (including the data-availability timeline chart) — the core value-delivering feature of the whole app. Build this against a stubbed/manually-seeded `ProcessedReading` table first, before real ingestion exists, to get fast feedback and prove the vertical-slice pattern for the hardest UI. **Do this second. DONE (2026-07-28), MVP scope — see Slice C entry above for what was deliberately deferred.**
+- **B. Ingestion + processing pipeline slice** (`nw.py` + `processing_service.py`) — wire real ingestion once the shape of `ProcessedReading` and the chart contracts are proven from slice C, so the pipeline isn't designed around a schema that might still change. **Do this third. DONE (2026-07-28), built and verified against mocked HTTP only — see Slice B entry above and the "Not started yet" caveats about the first real run.**
+- **D. Remaining tabs** (Sites CRUD, Outages, Reconductoring, Historical, Trends, Locations), downloads/export, the deferred Charts-tab table/edit/export, and `write_access` enforcement, one at a time. **Do this fourth. IN PROGRESS — Sites tab (edit-only) + first `write_access` enforcement DONE (2026-07-29); Outages + Reconductoring tabs (real add/edit/delete) DONE (2026-07-29). Historical, Trends, Locations, downloads/export, and the deferred Charts-tab table/edit/export are still not started.**
+- **E. Test coverage backfill** at each boundary (repository unit tests, API contract tests, frontend smoke tests) as each slice lands — not deferred to the end. **Ongoing alongside A–D, not a separate final phase.**
+
+This order was chosen over the original plan's implied backend-first ordering (B before C) because the app is unusable/undemonstratable without auth, and C is the highest visible value / fastest way to prove the architecture works for the feature that matters most. Slice B then wired real ingestion against the `ProcessedReading` schema and chart contracts already proven in slice C, per the original rationale for this ordering — that part of the plan is now complete.
+
+**Immediate next action:** continue slice D, one remaining tab/feature at a time. Reasonable next picks:
+- The deferred Charts-tab table/edit/export (from Slice C) — no new ORM models needed, and both the `write_access` enforcement pattern (`@require_write_access`) and the add/edit/delete REST pattern (see Outages/Reconductoring) now exist to reuse directly. Probably the most self-contained remaining item.
+- Historical tab — needs `HistoricalResult` ported first (pre-2016 aggregate data, tied to the `AGGREGATION_DATE` backfill logic noted during the Slice C exploration but not yet investigated in depth).
+- Trends/Locations tabs — not yet explored at all in this repo's session history; check the old repo's corresponding layout/callback/service files before designing, same as every other tab so far.
+- Downloads/export (CSV export links) — every ported tab so far (Sites, Outages, Reconductoring) has an old-app equivalent export link that wasn't part of what got scoped in; a generic per-tab CSV export could be worth doing as its own small pass across all of them at once, rather than repeating it per-tab.
+
+Follow the same layered vertical-slice pattern used for every prior slice (model → repository → domain service → API route → shared contract → frontend client → callback/page), and apply `@require_write_access` (`backend/api/auth_guard.py`) to any new write endpoint rather than re-deriving the check.
+
+## Full original migration plan (7 phases, for reference)
+
+This was the original phased plan drafted before implementation started. Phase 1 and Phase 6 (deployment) are done; phases 2–5 are ~70% done (Site + auth + Charts + ingestion + Sites/Outages/Reconductoring slices, as described above).
+
+1. Establish the new repo skeleton, preserving the original repo as read-only reference material (fresh app bootstrap, dependency files, deployment config, tests, shared DTO location). **DONE.**
+2. Split the monolith into explicit layers: backend (ingestion, processing, persistence, API), frontend (Dash layout/callbacks), shared (schemas/utilities). Reuse old code as source material but do not keep old cross-layer imports. **~70% done (Site + auth + Charts/ProcessedReading + ingestion/Reading + Sites/Outages/Reconductoring slices).**
+3. Move database access behind repository-style interfaces; move ingestion/processing into backend use-case services, so backend can run/test without Dash. **DONE for every model that exists so far (Site, User, ProcessedReading, Reading, Outage, OutageType, Reconductoring) — ingestion/processing now run fully outside Dash via the `ingest` CLI/service.**
+4. Add API endpoints for the frontend's actual needs (chart data, table data, site lists, timeline data, export/download links, update actions). Dash callbacks should stop calling database/service internals directly. **Site-list, site-detail/update, auth, chart-data, and full outages/reconductoring CRUD endpoints all exist. No table-data, timeline-only, or export endpoints yet (Charts tab's collapsible table/export were deferred, see Slice C). Ingestion has no API endpoint — it's a backend-only CLI job, matching the old app.**
+5. Update frontend to be a pure presentation layer — keep existing tab structure/UX, but depend on data contracts, not ORM/ingestion. **`dbc.Tabs` shell now has 4 of 7 old tabs (Charts, Sites, Outages, Reconductoring) behind the auth gate; Sites is a real edit UI, Outages/Reconductoring are real add/edit/delete UIs (all `write_access`-gated), Charts tab is still MVP-scoped (no table/export/edit).**
+6. Split jobs/deployment boundaries so ingestion/processing can run offline/scheduled independently of the UI; frontend deployable against backend API; keep Alembic with backend. **DONE — Docker deployment-like stack (db/db-migrate/web/nginx) plus the profile-gated `ingest` one-shot service, which runs fully independently of `web`. No scheduling (cron/APScheduler) added — matches the old app, which relied on an uncommitted external cron entry.**
+7. Add tests at each boundary (backend unit tests, API contract tests, frontend integration tests). Use old repo as behavior reference, not a dependency. **50 backend tests exist, spanning three levels: full-Flask-app tests (auth/sites/charts/site-updates/outages/reconductoring), pure-function unit tests with no Flask app at all (`test_processing_service.py`), and a mocked-HTTP-boundary test (`test_nw_client.py`). Still no frontend/Dash-callback tests — every tab's Dash callbacks were verified manually against a running `docker compose` stack instead.**
+
+## Key decisions already made (don't relitigate without reason)
+- Keep the original `transpower-conductor-noise-tool` untouched as a reference copy — never import from it.
+- Modular-monolith-to-two-apps migration, not a microservices split.
+- Frontend/backend separation is the primary boundary; don't split ingestion/API/persistence into separate deployables yet.
+- Preserve current user-facing behavior first, refine internals second.
+- Shared DTOs live inside this repo (`shared/contracts.py`), not a separate installable package, to avoid packaging overhead for now.
+- Frontend calls backend via a thin client wrapper (`frontend/client.py`), not raw HTTP calls scattered through callbacks — this keeps callback code small and lets backend transport change later without rewriting callbacks.
+
+## How to run / verify locally
+
+```bash
+# Full deployment-like stack (db -> db-migrate -> web)
+docker compose up --build db db-migrate web
+
+# Endpoints once web is up (published on host port 5001)
+curl http://localhost:5001/api/health
+curl http://localhost:5001/api/sites
+
+# Auth (demo credentials in README.md)
+curl -X POST http://localhost:5001/api/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"demo@transpower.example","password":"demo-password"}'
+# Browser-facing login page (sets the session cookie and redirects to /app/, which now has
+# Charts + Sites + Outages + Reconductoring tabs):
+# http://localhost:5001/login
+
+# Chart data (site multi-select is optional — omit/empty noise_site_id for all sites)
+curl -X POST http://localhost:5001/api/charts -H "Content-Type: application/json" \
+  -d '{"noise_site_id":[51],"condition":"all","parameter":"tone_100hz"}'
+
+# Site detail (full fields) and update (requires an authenticated session with
+# write_access=True — the demo user has it; cookie jar from a prior login curl):
+curl http://localhost:5001/api/sites/detail
+curl -b /tmp/cookies.txt -X PATCH http://localhost:5001/api/sites/51 \
+  -H "Content-Type: application/json" -d '{"site_code":"NEW","plot_color":"#aabbcc"}'
+
+# Outages (full add/edit/delete, requires write_access same as above)
+curl http://localhost:5001/api/outages
+curl http://localhost:5001/api/outages/types
+curl -b /tmp/cookies.txt -X POST http://localhost:5001/api/outages -H "Content-Type: application/json" \
+  -d '{"noise_site_id":51,"outage_type":"monitoring","start_datetime":"2025-01-01T00:00:00","end_datetime":"2025-01-01T01:00:00"}'
+curl -b /tmp/cookies.txt -X DELETE http://localhost:5001/api/outages/1
+
+# Reconductoring (same shape as outages)
+curl http://localhost:5001/api/reconductoring
+curl -b /tmp/cookies.txt -X POST http://localhost:5001/api/reconductoring -H "Content-Type: application/json" \
+  -d '{"noise_site_id":51,"conductor_and_treatment":"New conductor","reconductoring_date":"2025-01-01"}'
+
+# Ingestion (opt-in, needs real NW_USERNAME/NW_PASSWORD - never run automatically):
+NW_USERNAME=... NW_PASSWORD=... docker compose --profile ingestion run --rm ingest
+
+# Backend tests — no local venv/poetry available in this dev environment so far;
+# run inside a throwaway container instead of bare `pytest`:
+docker run --rm -v "$(pwd):/app" -w /app python:3.11-slim \
+  bash -c "pip install -e . pytest && python -m pytest tests/ -v"
+```
+
+Compose services: `db` (MySQL 8, healthcheck-gated), `db-migrate` (one-shot: `alembic upgrade head` then seed CLI, must exit 0), `web` (gunicorn, depends on db healthy + db-migrate completed successfully), `nginx` (optional, profile `prodlike`).

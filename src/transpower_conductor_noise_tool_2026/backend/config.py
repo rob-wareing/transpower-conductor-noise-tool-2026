@@ -10,6 +10,7 @@ DEFAULT_PROCESSED_READING_FIXTURE_PATH = ROOT_DIR / "data" / "processed_reading.
 DEFAULT_OUTAGE_TYPE_FIXTURE_PATH = ROOT_DIR / "data" / "outage_type.csv"
 DEFAULT_OUTAGE_FIXTURE_PATH = ROOT_DIR / "data" / "outage.csv"
 DEFAULT_RECONDUCTORING_FIXTURE_PATH = ROOT_DIR / "data" / "reconductoring.csv"
+DEFAULT_HISTORICAL_RESULT_FIXTURE_PATH = ROOT_DIR / "data" / "historical_result.csv"
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -34,6 +35,9 @@ class Settings:
     OUTAGE_FIXTURE_PATH = Path(os.environ.get("OUTAGE_FIXTURE_PATH", DEFAULT_OUTAGE_FIXTURE_PATH))
     RECONDUCTORING_FIXTURE_PATH = Path(
         os.environ.get("RECONDUCTORING_FIXTURE_PATH", DEFAULT_RECONDUCTORING_FIXTURE_PATH)
+    )
+    HISTORICAL_RESULT_FIXTURE_PATH = Path(
+        os.environ.get("HISTORICAL_RESULT_FIXTURE_PATH", DEFAULT_HISTORICAL_RESULT_FIXTURE_PATH)
     )
     AUTO_INIT_DB = _env_bool("AUTO_INIT_DB", True)
     AUTO_SEED_DATA = _env_bool("AUTO_SEED_DATA", True)

@@ -4,6 +4,9 @@ import requests
 
 from transpower_conductor_noise_tool_2026.shared.contracts import (
     ChartFilters,
+    HistoricalResultCreate,
+    HistoricalResultDetail,
+    HistoricalResultUpdate,
     OutageCreate,
     OutageDetail,
     OutageUpdate,
@@ -120,4 +123,30 @@ class BackendClient:
     def delete_reconductoring_event(self, event_id: int, cookies):
         return requests.delete(
             f"{self.base_url}/api/reconductoring/{event_id}", cookies=cookies, timeout=10
+        )
+
+    def get_historical_results(self):
+        response = requests.get(f"{self.base_url}/api/historical", timeout=10)
+        response.raise_for_status()
+        return [HistoricalResultDetail.model_validate(item) for item in response.json()["items"]]
+
+    def create_historical_result(self, data: HistoricalResultCreate, cookies):
+        return requests.post(
+            f"{self.base_url}/api/historical",
+            json=data.model_dump(mode="json"),
+            cookies=cookies,
+            timeout=10,
+        )
+
+    def update_historical_result(self, result_id: int, update: HistoricalResultUpdate, cookies):
+        return requests.patch(
+            f"{self.base_url}/api/historical/{result_id}",
+            json=update.model_dump(exclude_unset=True, mode="json"),
+            cookies=cookies,
+            timeout=10,
+        )
+
+    def delete_historical_result(self, result_id: int, cookies):
+        return requests.delete(
+            f"{self.base_url}/api/historical/{result_id}", cookies=cookies, timeout=10
         )

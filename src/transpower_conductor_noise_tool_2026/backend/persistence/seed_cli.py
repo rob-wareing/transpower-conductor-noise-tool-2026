@@ -1,5 +1,6 @@
 from transpower_conductor_noise_tool_2026.backend.app import create_app
 from transpower_conductor_noise_tool_2026.backend.persistence.seed import (
+    seed_historical_results_from_csv,
     seed_outage_types_from_csv,
     seed_outages_from_csv,
     seed_processed_readings_from_csv,
@@ -33,6 +34,10 @@ def main():
             app.config["RECONDUCTORING_FIXTURE_PATH"]
         )
         print(f"seeded_reconductoring={inserted_reconductoring}")
+        inserted_historical_results = seed_historical_results_from_csv(
+            app.config["HISTORICAL_RESULT_FIXTURE_PATH"]
+        )
+        print(f"seeded_historical_results={inserted_historical_results}")
 
 
 if __name__ == "__main__":

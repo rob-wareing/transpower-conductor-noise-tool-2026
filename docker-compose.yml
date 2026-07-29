@@ -40,6 +40,7 @@ services:
       - OUTAGE_TYPE_FIXTURE_PATH=/app/data/outage_type.csv
       - OUTAGE_FIXTURE_PATH=/app/data/outage.csv
       - RECONDUCTORING_FIXTURE_PATH=/app/data/reconductoring.csv
+      - HISTORICAL_RESULT_FIXTURE_PATH=/app/data/historical_result.csv
       - AUTO_INIT_DB=false
       - AUTO_SEED_DATA=false
     volumes:
@@ -68,6 +69,7 @@ services:
       - OUTAGE_TYPE_FIXTURE_PATH=/app/data/outage_type.csv
       - OUTAGE_FIXTURE_PATH=/app/data/outage.csv
       - RECONDUCTORING_FIXTURE_PATH=/app/data/reconductoring.csv
+      - HISTORICAL_RESULT_FIXTURE_PATH=/app/data/historical_result.csv
       - AUTO_INIT_DB=false
       - AUTO_SEED_DATA=false
     volumes:

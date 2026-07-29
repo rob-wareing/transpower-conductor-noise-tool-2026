@@ -134,3 +134,29 @@ class ReconductoringUpdate(BaseModel):
     grease: str | None = None
     reconductoring_date: date | None = None
     notes: str | None = None
+
+
+class HistoricalResultDetail(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    noise_site_id: int
+    period_length: int
+    period_end_date: date
+    leq_adj: float | None = None
+    tone_100hz: float | None = None
+
+
+class HistoricalResultCreate(BaseModel):
+    noise_site_id: int
+    period_length: int = 2
+    period_end_date: date
+    leq_adj: float | None = None
+    tone_100hz: float | None = None
+
+
+class HistoricalResultUpdate(BaseModel):
+    period_length: int | None = None
+    period_end_date: date | None = None
+    leq_adj: float | None = None
+    tone_100hz: float | None = None

@@ -1,3 +1,4 @@
+from .historical_result_repository import HistoricalResultRepository
 from .outage_repository import OutageRepository
 from .outage_type_repository import OutageTypeRepository
 from .processed_reading_repository import ProcessedReadingRepository

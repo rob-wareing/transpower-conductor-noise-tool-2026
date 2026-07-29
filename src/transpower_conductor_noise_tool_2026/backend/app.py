@@ -6,6 +6,7 @@ from transpower_conductor_noise_tool_2026.backend.config import DEFAULT_DB_PATH,
 from transpower_conductor_noise_tool_2026.backend.extensions import db
 from transpower_conductor_noise_tool_2026.backend.persistence import models  # noqa: F401
 from transpower_conductor_noise_tool_2026.backend.persistence.seed import (
+    seed_historical_results_from_csv,
     seed_outage_types_from_csv,
     seed_outages_from_csv,
     seed_processed_readings_from_csv,
@@ -16,6 +17,7 @@ from transpower_conductor_noise_tool_2026.backend.persistence.seed import (
 
 from .api.auth_routes import bp as auth_bp
 from .api.chart_routes import bp as chart_bp
+from .api.historical_routes import bp as historical_bp
 from .api.outage_routes import bp as outage_bp
 from .api.reconductoring_routes import bp as reconductoring_bp
 from .api.routes import bp as api_bp
@@ -40,6 +42,7 @@ def create_app(test_config=None):
     app.register_blueprint(chart_bp)
     app.register_blueprint(outage_bp)
     app.register_blueprint(reconductoring_bp)
+    app.register_blueprint(historical_bp)
 
     with app.app_context():
         if app.config.get("AUTO_INIT_DB", False):
@@ -51,6 +54,7 @@ def create_app(test_config=None):
             seed_outage_types_from_csv(app.config["OUTAGE_TYPE_FIXTURE_PATH"])
             seed_outages_from_csv(app.config["OUTAGE_FIXTURE_PATH"])
             seed_reconductoring_from_csv(app.config["RECONDUCTORING_FIXTURE_PATH"])
+            seed_historical_results_from_csv(app.config["HISTORICAL_RESULT_FIXTURE_PATH"])
 
     @app.get("/health")
     def health():

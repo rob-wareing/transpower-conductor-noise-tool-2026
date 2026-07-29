@@ -4,6 +4,9 @@ import pandas as pd
 
 from transpower_conductor_noise_tool_2026.backend.domain.auth_service import hash_password
 from transpower_conductor_noise_tool_2026.backend.extensions import db
+from transpower_conductor_noise_tool_2026.backend.persistence.models.historical_result import (
+    HistoricalResult,
+)
 from transpower_conductor_noise_tool_2026.backend.persistence.models.outage import Outage
 from transpower_conductor_noise_tool_2026.backend.persistence.models.outage_type import OutageType
 from transpower_conductor_noise_tool_2026.backend.persistence.models.processed_reading import (
@@ -137,6 +140,30 @@ def seed_reconductoring_from_csv(csv_path: Path):
                 reconductoring_date=record["reconductoring_date"].date(),
                 plot_linestyle=_clean_optional_value(record.get("plot_linestyle")),
                 notes=_clean_optional_value(record.get("notes")),
+            )
+        )
+
+    db.session.commit()
+    return len(df)
+
+
+def seed_historical_results_from_csv(csv_path: Path):
+    if not csv_path.exists():
+        return 0
+
+    if HistoricalResult.query.count():
+        return 0
+
+    df = pd.read_csv(csv_path, parse_dates=["period_end_date"])
+    for record in df.to_dict("records"):
+        db.session.add(
+            HistoricalResult(
+                id=int(record["id"]),
+                noise_site_id=int(record["noise_site_id"]),
+                period_length=int(record["period_length"]),
+                period_end_date=record["period_end_date"].date(),
+                leq_adj=_clean_optional_value(record.get("leq_adj")),
+                tone_100hz=_clean_optional_value(record.get("tone_100hz")),
             )
         )
 

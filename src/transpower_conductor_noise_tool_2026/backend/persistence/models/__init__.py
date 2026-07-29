@@ -1,3 +1,4 @@
+from .historical_result import HistoricalResult
 from .outage import Outage
 from .outage_type import OutageType
 from .processed_reading import ProcessedReading

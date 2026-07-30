@@ -34,6 +34,8 @@ def content(write_access: bool = False):
             html.Button(
                 "Save changes", id="historical-save-button", n_clicks=0, style=button_style
             ),
+            html.Button("Export CSV", id="historical-export-button", n_clicks=0),
+            dcc.Download(id="historical-download"),
             html.Div(id="historical-status"),
         ]
     )

@@ -8,6 +8,18 @@ def _make_client(tmp_path, monkeypatch):
     return app.test_client()
 
 
+def _make_app_and_client(tmp_path, monkeypatch):
+    db_path = tmp_path / "test.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+    app = create_app({"TESTING": True})
+    return app, app.test_client()
+
+
+def _login(client, email="demo@transpower.example", password="demo-password"):
+    response = client.post("/api/auth/login", json={"email": email, "password": password})
+    assert response.status_code == 200
+
+
 def test_charts_endpoint_returns_both_figures(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
 
@@ -123,3 +135,206 @@ def test_charts_endpoint_excludes_historical_results_for_dry_condition(tmp_path,
     if traces:
         dates = traces[0]["x"]
         assert not any(str(d).startswith("2019") or str(d).startswith("2016") for d in dates)
+
+
+def test_charts_endpoint_conductor_and_treatment_filter_splits_trace_name(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    # Site 51 ("Demo Site") has a single Reconductoring event dated 2024-11-15
+    # ("Standard conductor (standard grease)"), and all of its 50 readings
+    # postdate that event, so they all get stamped with it.
+    response = client.post(
+        "/api/charts",
+        json={
+            "noise_site_id": [51],
+            "conductor_and_treatment": ["Standard conductor (standard grease)"],
+        },
+    )
+
+    assert response.status_code == 200
+    traces = response.get_json()["noise_chart"]["data"]
+    assert len(traces) == 1
+    assert "Standard conductor (standard grease)" in traces[0]["name"]
+
+
+def test_charts_endpoint_conductor_and_treatment_filter_excludes_unmatched_sites(
+    tmp_path, monkeypatch
+):
+    client = _make_client(tmp_path, monkeypatch)
+
+    # Site 87 ("Portable Logger 3") has no Reconductoring events at all, so
+    # every one of its readings stays unstamped ("") and gets filtered out.
+    response = client.post(
+        "/api/charts",
+        json={
+            "noise_site_id": [87],
+            "conductor_and_treatment": ["Standard conductor (standard grease)"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["noise_chart"]["data"] == []
+
+
+def test_charts_endpoint_grease_filter_matches_conductor_and_treatment_filter(
+    tmp_path, monkeypatch
+):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.post("/api/charts", json={"noise_site_id": [51], "grease": ["standard"]})
+
+    assert response.status_code == 200
+    traces = response.get_json()["noise_chart"]["data"]
+    assert len(traces) == 1
+    assert "Standard conductor (standard grease)" in traces[0]["name"]
+
+
+def test_charts_endpoint_days_since_conductoring_guard_returns_empty_without_a_filter(
+    tmp_path, monkeypatch
+):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/api/charts", json={"noise_site_id": [51], "plot_by": "days_since_conductoring"}
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["noise_chart"]["data"] == []
+    assert "conductor" in payload["noise_chart"]["layout"]["title"]["text"].lower()
+
+
+def test_charts_endpoint_days_since_conductoring_plots_numeric_x_axis_with_filter(
+    tmp_path, monkeypatch
+):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/api/charts",
+        json={
+            "noise_site_id": [51],
+            "plot_by": "days_since_conductoring",
+            "conductor_and_treatment": ["Standard conductor (standard grease)"],
+        },
+    )
+
+    assert response.status_code == 200
+    traces = response.get_json()["noise_chart"]["data"]
+    assert len(traces) == 1
+    assert all(isinstance(x, (int, float)) for x in traces[0]["x"])
+
+
+def test_charts_endpoint_rejects_invalid_plot_by(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.post("/api/charts", json={"plot_by": "not-a-real-mode"})
+
+    assert response.status_code == 400
+
+
+def test_charts_table_endpoint_returns_augmented_rows(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.post("/api/charts/table", json={"noise_site_id": [51]})
+
+    assert response.status_code == 200
+    items = response.get_json()["items"]
+    assert len(items) == 50
+    assert all(item["conductor_and_treatment"] == "Standard conductor (standard grease)" for item in items)
+    assert all(item["days_since_conductoring"] is not None for item in items)
+    assert {"id", "noise_site_id", "datetime", "leq_adj", "is_wet", "include"} <= set(items[0].keys())
+
+
+def test_charts_table_endpoint_respects_conductor_filter(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/api/charts/table",
+        json={
+            "noise_site_id": [87],
+            "conductor_and_treatment": ["Standard conductor (standard grease)"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["items"] == []
+
+
+def test_update_processed_reading_requires_authentication(tmp_path, monkeypatch):
+    _app, client = _make_app_and_client(tmp_path, monkeypatch)
+
+    response = client.patch("/api/processed-readings/1", json={"include": False})
+
+    assert response.status_code == 401
+
+
+def test_update_processed_reading_requires_write_access(tmp_path, monkeypatch):
+    from transpower_conductor_noise_tool_2026.backend.domain.auth_service import create_user
+
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    with app.app_context():
+        create_user("Read Only", "readonly@transpower.example", "password", write_access=False)
+    _login(client, "readonly@transpower.example", "password")
+
+    response = client.patch("/api/processed-readings/1", json={"include": False})
+
+    assert response.status_code == 403
+
+
+def test_update_processed_reading_with_write_access_persists(tmp_path, monkeypatch):
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    _login(client)
+
+    table_response = client.post("/api/charts/table", json={"noise_site_id": [51]})
+    reading_id = table_response.get_json()["items"][0]["id"]
+
+    response = client.patch(f"/api/processed-readings/{reading_id}", json={"include": False})
+
+    assert response.status_code == 200
+
+    with app.app_context():
+        from transpower_conductor_noise_tool_2026.backend.extensions import db
+        from transpower_conductor_noise_tool_2026.backend.persistence.models.processed_reading import (
+            ProcessedReading,
+        )
+
+        reading = db.session.get(ProcessedReading, reading_id)
+        assert reading.include is False
+
+
+def test_update_processed_reading_returns_404_for_unknown_id(tmp_path, monkeypatch):
+    _app, client = _make_app_and_client(tmp_path, monkeypatch)
+    _login(client)
+
+    response = client.patch("/api/processed-readings/999999", json={"include": False})
+
+    assert response.status_code == 404
+
+
+def test_charts_table_endpoint_excludes_readings_during_known_outages(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    # Site 115 has a seeded Outage from 2025-03-05T00:00 to 2025-03-06T00:00
+    # (exclusive start, inclusive end) and a daily reading at exactly
+    # 2025-03-06T00:00 - that one reading should be excluded from the raw
+    # table entirely, while the boundary reading at 2025-03-05T00:00 (not
+    # strictly *after* the outage start) is kept.
+    response = client.post("/api/charts/table", json={"noise_site_id": [115]})
+
+    assert response.status_code == 200
+    items = response.get_json()["items"]
+    dates = {item["datetime"] for item in items}
+    assert "2025-03-06T00:00:00" not in dates
+    assert "2025-03-05T00:00:00" in dates
+
+
+def test_charts_table_endpoint_outage_exclusion_is_scoped_to_its_own_site(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    # Site 51 has no reading inside its own seeded Outage window (which
+    # predates its reading history), so its row count should be unaffected -
+    # this guards against a sitewide-instead-of-windowed exclusion bug.
+    response = client.post("/api/charts/table", json={"noise_site_id": [51]})
+
+    assert response.status_code == 200
+    assert len(response.get_json()["items"]) == 50

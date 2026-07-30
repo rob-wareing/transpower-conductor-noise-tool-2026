@@ -37,6 +37,8 @@ def content(write_access: bool = False):
             html.Button(
                 "Save changes", id="outages-save-button", n_clicks=0, style=button_style
             ),
+            html.Button("Export CSV", id="outages-export-button", n_clicks=0),
+            dcc.Download(id="outages-download"),
             html.Div(id="outages-status"),
         ]
     )

@@ -67,6 +67,9 @@ class ChartFilters(BaseModel):
     condition: str = "all"
     parameter: str = "tone_100hz"
     interval_weeks: int = 2
+    conductor_and_treatment: List[str] = []
+    grease: List[str] = []
+    plot_by: str = "datetime"
 
     @field_validator("interval_weeks")
     @classmethod
@@ -74,6 +77,13 @@ class ChartFilters(BaseModel):
         if 1 <= value <= 4:
             return value
         raise ValueError("interval_weeks must be between 1 and 4")
+
+    @field_validator("plot_by")
+    @classmethod
+    def validate_plot_by(cls, value):
+        if value in {"datetime", "days_since_conductoring"}:
+            return value
+        raise ValueError("plot_by must be 'datetime' or 'days_since_conductoring'")
 
 
 class SiteListResponse(BaseModel):
@@ -92,6 +102,32 @@ class UserSummary(BaseModel):
 class ChartsResponse(BaseModel):
     noise_chart: dict
     timeline_chart: dict
+
+
+class ChartTableRow(BaseModel):
+    id: int
+    noise_site_id: int
+    site_name: str
+    datetime: datetime
+    conductor_and_treatment: str | None = None
+    grease: str | None = None
+    days_since_conductoring: float | None = None
+    leq_adj: float
+    tone_100hz: float
+    tone_200hz: float
+    rain1: float
+    rain2: float
+    is_wet: bool
+    include: bool
+
+
+class ChartTableResponse(BaseModel):
+    items: List[ChartTableRow]
+
+
+class ProcessedReadingUpdate(BaseModel):
+    is_wet: bool | None = None
+    include: bool | None = None
 
 
 class OutageDetail(BaseModel):

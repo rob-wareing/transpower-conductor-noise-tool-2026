@@ -4,12 +4,14 @@ import requests
 
 from transpower_conductor_noise_tool_2026.shared.contracts import (
     ChartFilters,
+    ChartTableRow,
     HistoricalResultCreate,
     HistoricalResultDetail,
     HistoricalResultUpdate,
     OutageCreate,
     OutageDetail,
     OutageUpdate,
+    ProcessedReadingUpdate,
     ReconductoringCreate,
     ReconductoringDetail,
     ReconductoringUpdate,
@@ -67,6 +69,23 @@ class BackendClient:
         )
         response.raise_for_status()
         return response.json()
+
+    def get_chart_table_rows(self, filters: ChartFilters):
+        response = requests.post(
+            f"{self.base_url}/api/charts/table",
+            json=filters.model_dump(mode="json"),
+            timeout=30,
+        )
+        response.raise_for_status()
+        return [ChartTableRow.model_validate(item) for item in response.json()["items"]]
+
+    def update_processed_reading(self, reading_id: int, update: ProcessedReadingUpdate, cookies):
+        return requests.patch(
+            f"{self.base_url}/api/processed-readings/{reading_id}",
+            json=update.model_dump(exclude_unset=True, mode="json"),
+            cookies=cookies,
+            timeout=10,
+        )
 
     def get_outages(self):
         response = requests.get(f"{self.base_url}/api/outages", timeout=10)

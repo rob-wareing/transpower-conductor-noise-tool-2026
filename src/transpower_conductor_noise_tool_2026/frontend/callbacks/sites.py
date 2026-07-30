@@ -1,5 +1,6 @@
 import flask
-from dash import Input, Output, State, html
+import pandas as pd
+from dash import Input, Output, State, dcc, html, no_update
 
 from transpower_conductor_noise_tool_2026.shared.contracts import SiteUpdate
 
@@ -51,3 +52,14 @@ def register_callbacks(dash_app, backend_url: str | None):
         if errors:
             return html.Ul([html.Li(error) for error in errors])
         return "Saved."
+
+    @dash_app.callback(
+        Output("sites-download", "data"),
+        Input("sites-export-button", "n_clicks"),
+        State("sites-table", "data"),
+        prevent_initial_call=True,
+    )
+    def export_sites(n_clicks, rows):
+        if not n_clicks or not rows:
+            return no_update
+        return dcc.send_data_frame(pd.DataFrame(rows).to_csv, "sites.csv", index=False)

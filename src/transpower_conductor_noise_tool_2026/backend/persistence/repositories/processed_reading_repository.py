@@ -26,3 +26,10 @@ class ProcessedReadingRepository:
         return query.order_by(
             ProcessedReading.noise_site_id.asc(), ProcessedReading.datetime.asc()
         ).all()
+
+    def find_by_id(self, reading_id):
+        return db.session.get(ProcessedReading, reading_id)
+
+    def save(self, reading):
+        db.session.commit()
+        return reading

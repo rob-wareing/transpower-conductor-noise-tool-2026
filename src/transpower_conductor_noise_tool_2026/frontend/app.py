@@ -100,7 +100,11 @@ def create_dashboard(server=None, backend_url=None):
                 html.A("Log out", href="/logout"),
                 dbc.Tabs(
                     [
-                        dbc.Tab(charts_layout.content(), label="Charts", tab_id="charts"),
+                        dbc.Tab(
+                            charts_layout.content(write_access=current_user.write_access),
+                            label="Charts",
+                            tab_id="charts",
+                        ),
                         dbc.Tab(
                             sites_layout.content(write_access=current_user.write_access),
                             label="Sites",

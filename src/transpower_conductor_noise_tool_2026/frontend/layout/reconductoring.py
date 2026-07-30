@@ -38,6 +38,8 @@ def content(write_access: bool = False):
                 n_clicks=0,
                 style=button_style,
             ),
+            html.Button("Export CSV", id="reconductoring-export-button", n_clicks=0),
+            dcc.Download(id="reconductoring-download"),
             html.Div(id="reconductoring-status"),
         ]
     )

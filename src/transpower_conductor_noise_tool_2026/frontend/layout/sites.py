@@ -36,6 +36,8 @@ def content(write_access: bool = False):
                 n_clicks=0,
                 style={} if write_access else {"display": "none"},
             ),
+            html.Button("Export CSV", id="sites-export-button", n_clicks=0),
+            dcc.Download(id="sites-download"),
             html.Div(id="sites-status"),
         ]
     )

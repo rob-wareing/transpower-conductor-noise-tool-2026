@@ -19,6 +19,7 @@ from .api.auth_routes import bp as auth_bp
 from .api.chart_routes import bp as chart_bp
 from .api.historical_routes import bp as historical_bp
 from .api.outage_routes import bp as outage_bp
+from .api.processed_reading_routes import bp as processed_reading_bp
 from .api.reconductoring_routes import bp as reconductoring_bp
 from .api.routes import bp as api_bp
 
@@ -43,6 +44,7 @@ def create_app(test_config=None):
     app.register_blueprint(outage_bp)
     app.register_blueprint(reconductoring_bp)
     app.register_blueprint(historical_bp)
+    app.register_blueprint(processed_reading_bp)
 
     with app.app_context():
         if app.config.get("AUTO_INIT_DB", False):

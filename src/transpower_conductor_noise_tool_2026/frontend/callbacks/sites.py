@@ -1,6 +1,7 @@
 import flask
 import pandas as pd
 from dash import Input, Output, State, dcc, html, no_update
+from pydantic import ValidationError
 
 from transpower_conductor_noise_tool_2026.shared.contracts import SiteUpdate
 
@@ -42,7 +43,11 @@ def register_callbacks(dash_app, backend_url: str | None):
 
         errors = []
         for row in rows:
-            update = SiteUpdate(**{field: row.get(field) for field in EDITABLE_FIELDS})
+            try:
+                update = SiteUpdate(**{field: row.get(field) for field in EDITABLE_FIELDS})
+            except ValidationError as exc:
+                errors.append(f"site {row['noise_site_id']}: {exc.errors()[0]['msg']}")
+                continue
             response = client.update_site(
                 row["noise_site_id"], update, cookies=flask.request.cookies
             )

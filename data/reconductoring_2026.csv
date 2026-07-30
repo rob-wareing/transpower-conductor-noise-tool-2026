@@ -1,0 +1,43 @@
+id,noise_site_id,conductor,Grease,SC proposed renaming,reconductoring_date,notes,plot_linestyle
+1,115,Untreated Zebra,C2,Zebra,2016-02-24,NULL,NULL
+22,121,"Zebra factory cleaned, fat drawn (not blasted)",C1.5,"Zebra - fat drawn, factory cleaned",2017-11-17,NULL,NULL
+2,123,"Zebra factory cleaned, fat drawn (not blasted)",C1.5,"Zebra - fat drawn, factory cleaned",2018-02-23,NULL,NULL
+3,124,Zebra strand cleaned in factory by hand,C1.5,Zebra - hand strand cleaned,2017-04-13,NULL,NULL
+4,136,"Zebra factory cleaned, fat drawn (not blasted)",C1.5,"Zebra - fat drawn, factory cleaned",2018-04-13,NULL,NULL
+5,137,"Zebra factory cleaned, fat drawn (not blasted)",C1.5,"Zebra - fat drawn, factory cleaned",2018-04-13,NULL,NULL
+6,142,Aged Goat,C1,Goat - aged,2018-04-13,NULL,dash
+7,142,Curlew,C1,Curlew,2019-11-01,NULL,NULL
+8,144,Aged Goat,C1,Goat - aged,2018-06-29,NULL,dash
+9,144,Curlew,C1,Curlew,2019-11-01,NULL,NULL
+10,145,Zebra factory cleaned and blasted,C1.5,"Zebra - factory cleaned, blasted",2018-08-22,NULL,NULL
+11,146,"Zebra factory cleaned, fat drawn (not blasted)",C1.5,"Zebra - fat drawn, factory cleaned",2018-02-23,NULL,NULL
+12,147,Zebra factory cleaned and blasted,C1.5,"Zebra - factory cleaned, blasted",2018-08-22,NULL,NULL
+13,148,Aged Goat,C1,Goat - aged,2018-08-16,conductor confirmed,NULL
+14,148,Curlew,C1,Curlew,2019-03-26,NULL,NULL
+15,154,Aged Goat,C1,Goat - aged,2019-01-23,conductor confirmed,NULL
+16,154,Curlew,C1,Curlew,2019-03-26,NULL,NULL
+18,159,"Zebra emulsified fat drawn, factory cleaned and blasted",C1.5,"Zebra - fat drawn, factory cleaned, blasted",2018-12-01,Date and conductor confirmed,NULL
+19,161,Zebra in-situ cleaned,C2,Zebra - site cleaned,2017-07-12,Date since cleaning. Strung on 2016-02-01,NULL
+26,162,Sulphur AAAC untreated 110kV,C1,Sulphur - 110kV,2019-11-19,NULL,NULL
+23,172,Duplex aged Zebra,C1,"Zebra - duplex, aged",2020-09-09,NULL,NULL
+24,173,Duplex aged Zebra,C1,"Zebra - duplex, aged",2020-08-18,date is commissioning date of monitor,dash
+32,173,New Chukar,C1.5,Chukar,2021-03-31,2nd of circuit outage dates used as both circuits affect monitoring results,NULL
+25,174,Duplex aged Zebra,C1,"Zebra - duplex, aged",2020-09-08,date is commissioning date of monitor,NULL
+27,181,Duplex aged Zebra,C1,"Zebra - duplex, aged",2020-11-21,date is commissioning date of monitor,dash
+33,181,New Pheasant,C1.5,Pheasant,2021-03-31,2nd of circuit outage dates used as both circuits affect monitoring results,NULL
+28,187,Curlew,C1,Curlew,2019-03-26,NULL,NULL
+29,188,Curlew,C1,Curlew,2019-03-26,NULL,NULL
+30,189,Curlew,C1,Curlew,2019-03-26,NULL,NULL
+31,190,Curlew,C1,Curlew,2019-03-26,NULL,NULL
+34,200,Aged goat,C1,Goat - aged,2022-02-15,date is commissioning date of monitor,NULL
+36,200,Curlew,C1,Curlew,2022-11-11,commissioning of reconductored line,NULL
+39,204,Duplex aged Zebra,C1,"Zebra - duplex, aged",2022-10-14,data is commissioning date of monitor,NULL
+44,204,Fully greased duplex new Zebra,C2,Zebra - duplex,2024-03-08,date here is teh date of the first circuit outage end,dash
+40,205,Chukar reduced grease (C1.5),C1.5,Chukar - reduced grease,2023-02-21,commissioning of reconductored line,dash
+37,205,Duplex aged Zebra,C1,"Zebra - duplex, aged",2022-11-04,date is commissioning date of monitor,NULL
+41,206,Chukar fully greased (C2),C2,Chukar,2023-02-21,commissioning of reconductored line,dash
+38,206,Duplex aged Zebra,C1,"Zebra - duplex, aged",2022-11-10,date is comissioning date of monitor,NULL
+42,209,Chukar reduced grease (C1.5),C1.5,Chukar - reduced grease,2023-02-21,commissioning of reconductored line,dash
+43,209,Duplex Aged Zebra,C1,"Zebra - duplex, aged",2022-11-04,date is commissioning date of monitor,NULL
+21,1121,Zebra factory hand cleaned,C1.5,Zebra - factory hand cleaned,2016-11-18,NULL,NULL
+45,1123,Zebra factory hand cleaned and blasted,C1.5,"Zebra - factory hand cleaned, blasted",2016-11-18,NULL,dash

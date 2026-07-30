@@ -87,6 +87,7 @@ def collect_new_readings(
     site_repository: SiteRepository | None = None,
     reading_repository: ReadingRepository | None = None,
     processed_reading_repository: ProcessedReadingRepository | None = None,
+    site_ids: list[int] | None = None,
 ):
     client = client or NoiseAndWeatherClient()
     site_repository = site_repository or SiteRepository()
@@ -94,11 +95,15 @@ def collect_new_readings(
     processed_reading_repository = processed_reading_repository or ProcessedReadingRepository()
 
     known_site_ids = {site.noise_site_id for site in site_repository.list_sites()}
+    allowed_site_ids = set(site_ids) if site_ids else None
 
     summary = {}
     for remote_site in client.sites():
         noise_site_id = int(remote_site["noise_site_id"])
         if noise_site_id in IGNORE_SITES:
+            continue
+
+        if allowed_site_ids is not None and noise_site_id not in allowed_site_ids:
             continue
 
         if noise_site_id not in known_site_ids:

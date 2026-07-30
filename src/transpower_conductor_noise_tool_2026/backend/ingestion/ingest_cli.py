@@ -12,7 +12,7 @@ def main():
         }
     )
     with app.app_context():
-        summary = collect_new_readings()
+        summary = collect_new_readings(site_ids=app.config.get("INGEST_SITE_IDS"))
         for noise_site_id, result in summary.items():
             print(f"site={noise_site_id} {result}")
 

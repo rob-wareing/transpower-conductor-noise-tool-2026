@@ -8,6 +8,7 @@ from transpower_conductor_noise_tool_2026.backend.persistence.models.processed_r
 from transpower_conductor_noise_tool_2026.backend.persistence.models.reading import Reading
 
 KNOWN_SITE = 115  # from data/site.csv, not in IGNORE_SITES
+OTHER_KNOWN_SITE = 137  # from data/site.csv, not in IGNORE_SITES
 IGNORED_SITE = 51  # in data/site.csv, but also in IGNORE_SITES
 UNKNOWN_SITE = 9999  # not in data/site.csv at all
 
@@ -96,6 +97,44 @@ def test_collect_new_readings_persists_readings_and_processed_readings(tmp_path,
             ProcessedReading.query.filter_by(noise_site_id=KNOWN_SITE).count()
             == processed_before + 1
         )
+
+
+def test_collect_new_readings_site_ids_scopes_to_named_sites_only(tmp_path, monkeypatch):
+    # Mirrors the external-DB testing use case: the local `site` table can have
+    # many known, non-ignored sites, but a real run should be limitable to just
+    # the ones named via site_ids - everything else is silently skipped, the
+    # same way an ignored/unknown site is (not even reported in the summary).
+    app = _make_app(tmp_path, monkeypatch)
+    with app.app_context():
+        timestamps = [pd.Timestamp("2025-01-01T23:00:00")]
+        client = FakeClient(
+            sites=[
+                {"noise_site_id": KNOWN_SITE, "site_id": 10},
+                {"noise_site_id": OTHER_KNOWN_SITE, "site_id": 11},
+            ],
+            events_by_site={
+                KNOWN_SITE: _raw_events_df(KNOWN_SITE, timestamps),
+                OTHER_KNOWN_SITE: _raw_events_df(OTHER_KNOWN_SITE, timestamps),
+            },
+        )
+
+        summary = ingestion_job.collect_new_readings(client=client, site_ids=[KNOWN_SITE])
+
+        assert KNOWN_SITE in summary
+        assert OTHER_KNOWN_SITE not in summary
+
+
+def test_collect_new_readings_site_ids_none_keeps_default_behaviour(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
+    with app.app_context():
+        client = FakeClient(
+            sites=[{"noise_site_id": KNOWN_SITE, "site_id": 10}],
+            events_by_site={},
+        )
+
+        summary = ingestion_job.collect_new_readings(client=client, site_ids=None)
+
+        assert KNOWN_SITE in summary
 
 
 def test_collect_new_readings_is_idempotent_for_readings_on_rerun(tmp_path, monkeypatch):

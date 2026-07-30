@@ -20,6 +20,13 @@ def _env_bool(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_int_list(name: str) -> list[int] | None:
+    value = os.environ.get(name)
+    if not value:
+        return None
+    return [int(item.strip()) for item in value.split(",") if item.strip()]
+
+
 class Settings:
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -48,3 +55,4 @@ class Settings:
     NW_USERNAME = os.environ.get("NW_USERNAME")
     NW_PASSWORD = os.environ.get("NW_PASSWORD")
     NW_REQUEST_TIMEOUT = float(os.environ.get("NW_REQUEST_TIMEOUT", "30"))
+    INGEST_SITE_IDS = _env_int_list("INGEST_SITE_IDS")

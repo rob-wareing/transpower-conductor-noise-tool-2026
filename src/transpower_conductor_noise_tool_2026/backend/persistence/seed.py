@@ -45,6 +45,8 @@ def seed_sites_from_csv(csv_path: Path):
                 or 0,
                 data_folder=_clean_optional_value(record.get("data_folder")),
                 report_folder=_clean_optional_value(record.get("report_folder")),
+                latitude=_clean_optional_value(record.get("latitude")),
+                longitude=_clean_optional_value(record.get("longitude")),
             )
         )
 

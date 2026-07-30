@@ -5,15 +5,18 @@ from dash import Input, Output, dcc, html
 
 from .callbacks.charts import register_callbacks as register_chart_callbacks
 from .callbacks.historical import register_callbacks as register_historical_callbacks
+from .callbacks.locations import register_callbacks as register_locations_callbacks
 from .callbacks.outages import register_callbacks as register_outage_callbacks
 from .callbacks.reconductoring import register_callbacks as register_reconductoring_callbacks
 from .callbacks.sites import register_callbacks as register_site_callbacks
 from .client import BackendClient
 from .layout import charts as charts_layout
 from .layout import historical as historical_layout
+from .layout import locations as locations_layout
 from .layout import outages as outages_layout
 from .layout import reconductoring as reconductoring_layout
 from .layout import sites as sites_layout
+from .layout import trends as trends_layout
 
 LOGIN_FORM = """
 <!doctype html>
@@ -118,6 +121,10 @@ def create_dashboard(server=None, backend_url=None):
                             label="Historical",
                             tab_id="historical",
                         ),
+                        dbc.Tab(trends_layout.content(), label="Trends", tab_id="trends"),
+                        dbc.Tab(
+                            locations_layout.content(), label="Locations", tab_id="locations"
+                        ),
                     ],
                     active_tab="charts",
                 ),
@@ -129,4 +136,5 @@ def create_dashboard(server=None, backend_url=None):
     register_outage_callbacks(dash_app, backend_url)
     register_reconductoring_callbacks(dash_app, backend_url)
     register_historical_callbacks(dash_app, backend_url)
+    register_locations_callbacks(dash_app, backend_url)
     return dash_app

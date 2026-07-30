@@ -30,8 +30,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("chart-date-range", "end_date"),
         Input("chart-condition", "value"),
         Input("chart-parameter", "value"),
+        Input("chart-interval-weeks", "value"),
     )
-    def refresh_charts(_n_intervals, site_ids, start_date, end_date, condition, parameter):
+    def refresh_charts(
+        _n_intervals, site_ids, start_date, end_date, condition, parameter, interval_weeks
+    ):
         empty_figure = {"data": [], "layout": {}}
         if client is None:
             return empty_figure, empty_figure
@@ -42,6 +45,7 @@ def register_callbacks(dash_app, backend_url: str | None):
             end_date=end_date,
             condition=condition or "all",
             parameter=parameter or "tone_100hz",
+            interval_weeks=interval_weeks or 2,
         )
         charts = client.get_charts(filters)
         return charts["noise_chart"], charts["timeline_chart"]

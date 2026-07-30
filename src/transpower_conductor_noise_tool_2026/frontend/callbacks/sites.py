@@ -5,7 +5,15 @@ from transpower_conductor_noise_tool_2026.shared.contracts import SiteUpdate
 
 from ..client import BackendClient
 
-EDITABLE_FIELDS = ["site_code", "plot_color", "height_adj_db", "data_folder", "report_folder"]
+EDITABLE_FIELDS = [
+    "site_code",
+    "plot_color",
+    "height_adj_db",
+    "data_folder",
+    "report_folder",
+    "latitude",
+    "longitude",
+]
 
 
 def register_callbacks(dash_app, backend_url: str | None):

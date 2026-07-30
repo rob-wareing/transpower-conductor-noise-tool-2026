@@ -30,6 +30,8 @@ def test_sites_detail_endpoint_returns_full_fields(tmp_path, monkeypatch):
         "height_adj_db",
         "data_folder",
         "report_folder",
+        "latitude",
+        "longitude",
     }
 
 
@@ -79,6 +81,38 @@ def test_update_site_rejects_invalid_plot_color(tmp_path, monkeypatch):
     _login(client)
 
     response = client.patch("/api/sites/51", json={"plot_color": "not-a-color"})
+
+    assert response.status_code == 400
+
+
+def test_update_site_persists_coordinates(tmp_path, monkeypatch):
+    _app, client = _make_client(tmp_path, monkeypatch)
+    _login(client)
+
+    response = client.patch(
+        "/api/sites/51", json={"latitude": -40.3523, "longitude": 175.6082}
+    )
+
+    assert response.status_code == 200
+    site = response.get_json()["site"]
+    assert site["latitude"] == -40.3523
+    assert site["longitude"] == 175.6082
+
+
+def test_update_site_rejects_out_of_range_latitude(tmp_path, monkeypatch):
+    _app, client = _make_client(tmp_path, monkeypatch)
+    _login(client)
+
+    response = client.patch("/api/sites/51", json={"latitude": 200})
+
+    assert response.status_code == 400
+
+
+def test_update_site_rejects_out_of_range_longitude(tmp_path, monkeypatch):
+    _app, client = _make_client(tmp_path, monkeypatch)
+    _login(client)
+
+    response = client.patch("/api/sites/51", json={"longitude": -200})
 
     assert response.status_code == 400
 

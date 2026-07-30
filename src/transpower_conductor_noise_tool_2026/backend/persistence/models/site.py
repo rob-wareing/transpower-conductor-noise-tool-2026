@@ -12,3 +12,5 @@ class Site(db.Model):
     height_adj_db = db.Column(db.Numeric(4, 2), nullable=False, default=0)
     data_folder = db.Column(db.String(500), nullable=True)
     report_folder = db.Column(db.String(500), nullable=True)
+    latitude = db.Column(db.Numeric(9, 6), nullable=True)
+    longitude = db.Column(db.Numeric(9, 6), nullable=True)

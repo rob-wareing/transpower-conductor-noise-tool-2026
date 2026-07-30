@@ -10,6 +10,8 @@ COLUMN_DEFS = [
     ("Height adjustment (dB)", "height_adj_db", "numeric"),
     ("Data folder", "data_folder", "text"),
     ("Report folder", "report_folder", "text"),
+    ("Latitude", "latitude", "numeric"),
+    ("Longitude", "longitude", "numeric"),
 ]
 
 

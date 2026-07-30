@@ -12,6 +12,8 @@ PARAMETER_OPTIONS = [
     {"label": "200Hz tone", "value": "tone_200hz"},
 ]
 
+INTERVAL_WEEKS_OPTIONS = [{"label": f"{n} week{'s' if n != 1 else ''}", "value": n} for n in range(1, 5)]
+
 
 def content():
     return html.Div(
@@ -51,6 +53,18 @@ def content():
                             ),
                         ],
                         style={"minWidth": "180px"},
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Aggregation period"),
+                            dcc.Dropdown(
+                                id="chart-interval-weeks",
+                                options=INTERVAL_WEEKS_OPTIONS,
+                                value=2,
+                                clearable=False,
+                            ),
+                        ],
+                        style={"minWidth": "160px"},
                     ),
                 ],
                 style={"display": "flex", "gap": "1rem", "flexWrap": "wrap", "marginBottom": "1rem"},

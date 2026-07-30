@@ -12,7 +12,7 @@ def charts():
     try:
         filters = ChartFilters.model_validate(request.get_json(silent=True) or {})
     except ValidationError as exc:
-        return jsonify({"error": exc.errors()}), 400
+        return jsonify({"error": exc.errors(include_context=False)}), 400
 
     noise_chart, timeline_chart = get_chart_figures(filters)
     return jsonify({"noise_chart": noise_chart, "timeline_chart": timeline_chart})

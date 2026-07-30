@@ -25,6 +25,8 @@ class SiteDetail(BaseModel):
     height_adj_db: float = 0
     data_folder: str | None = None
     report_folder: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class SiteUpdate(BaseModel):
@@ -33,6 +35,8 @@ class SiteUpdate(BaseModel):
     height_adj_db: float | None = None
     data_folder: str | None = None
     report_folder: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
     @field_validator("plot_color")
     @classmethod
@@ -41,6 +45,20 @@ class SiteUpdate(BaseModel):
             return value
         raise ValueError("plot_color must be a hex color like #aabbcc")
 
+    @field_validator("latitude")
+    @classmethod
+    def validate_latitude(cls, value):
+        if value is None or -90 <= value <= 90:
+            return value
+        raise ValueError("latitude must be between -90 and 90")
+
+    @field_validator("longitude")
+    @classmethod
+    def validate_longitude(cls, value):
+        if value is None or -180 <= value <= 180:
+            return value
+        raise ValueError("longitude must be between -180 and 180")
+
 
 class ChartFilters(BaseModel):
     noise_site_id: List[int] = []
@@ -48,6 +66,14 @@ class ChartFilters(BaseModel):
     end_date: date | None = None
     condition: str = "all"
     parameter: str = "tone_100hz"
+    interval_weeks: int = 2
+
+    @field_validator("interval_weeks")
+    @classmethod
+    def validate_interval_weeks(cls, value):
+        if 1 <= value <= 4:
+            return value
+        raise ValueError("interval_weeks must be between 1 and 4")
 
 
 class SiteListResponse(BaseModel):

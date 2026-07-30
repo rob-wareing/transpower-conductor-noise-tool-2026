@@ -5,8 +5,11 @@ from transpower_conductor_noise_tool_2026.backend.persistence.models.historical_
 
 
 class HistoricalResultRepository:
-    def list_results(self):
-        return HistoricalResult.query.order_by(HistoricalResult.period_end_date.desc()).all()
+    def list_results(self, site_ids=None):
+        query = HistoricalResult.query
+        if site_ids:
+            query = query.filter(HistoricalResult.noise_site_id.in_(site_ids))
+        return query.order_by(HistoricalResult.period_end_date.desc()).all()
 
     def find_by_id(self, result_id):
         return db.session.get(HistoricalResult, result_id)

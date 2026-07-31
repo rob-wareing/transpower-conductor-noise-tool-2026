@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import dash
 import dash_bootstrap_components as dbc
 import flask
@@ -77,7 +79,11 @@ def create_dashboard(server=None, backend_url=None):
         title="Conductor Noise Tool 2026",
         server=server,
         routes_pathname_prefix="/app/",
-        external_stylesheets=[dbc.themes.BOOTSTRAP],
+        external_stylesheets=[
+            dbc.themes.BOOTSTRAP,
+            "https://fonts.googleapis.com/css2?family=Lato:wght@300;400;500;700&display=swap",
+        ],
+        assets_folder=str(Path(__file__).resolve().parent / "assets"),
     )
     dash_app.config.suppress_callback_exceptions = True
     dash_app.layout = html.Div(
@@ -93,46 +99,54 @@ def create_dashboard(server=None, backend_url=None):
         if current_user is None:
             return dcc.Location(pathname="/login", id="redirect-to-login")
 
-        return html.Div(
+        tabs = dbc.Tabs(
             [
-                html.H1("Conductor Noise Tool 2026"),
-                html.P(f"Signed in as {current_user.name}."),
-                html.A("Log out", href="/logout"),
-                dbc.Tabs(
-                    [
-                        dbc.Tab(
-                            charts_layout.content(write_access=current_user.write_access),
-                            label="Charts",
-                            tab_id="charts",
-                        ),
-                        dbc.Tab(
-                            sites_layout.content(write_access=current_user.write_access),
-                            label="Sites",
-                            tab_id="sites",
-                        ),
-                        dbc.Tab(
-                            outages_layout.content(write_access=current_user.write_access),
-                            label="Outages",
-                            tab_id="outages",
-                        ),
-                        dbc.Tab(
-                            reconductoring_layout.content(write_access=current_user.write_access),
-                            label="Reconductoring",
-                            tab_id="reconductoring",
-                        ),
-                        dbc.Tab(
-                            historical_layout.content(write_access=current_user.write_access),
-                            label="Historical",
-                            tab_id="historical",
-                        ),
-                        dbc.Tab(trends_layout.content(), label="Trends", tab_id="trends"),
-                        dbc.Tab(
-                            locations_layout.content(), label="Locations", tab_id="locations"
-                        ),
-                    ],
-                    active_tab="charts",
+                dbc.Tab(
+                    charts_layout.content(write_access=current_user.write_access),
+                    label="Charts",
+                    tab_id="charts",
                 ),
-            ]
+                dbc.Tab(
+                    sites_layout.content(write_access=current_user.write_access),
+                    label="Sites",
+                    tab_id="sites",
+                ),
+                dbc.Tab(
+                    outages_layout.content(write_access=current_user.write_access),
+                    label="Outages",
+                    tab_id="outages",
+                ),
+                dbc.Tab(
+                    reconductoring_layout.content(write_access=current_user.write_access),
+                    label="Reconductoring",
+                    tab_id="reconductoring",
+                ),
+                dbc.Tab(
+                    historical_layout.content(write_access=current_user.write_access),
+                    label="Historical",
+                    tab_id="historical",
+                ),
+                dbc.Tab(trends_layout.content(), label="Trends", tab_id="trends"),
+                dbc.Tab(locations_layout.content(), label="Locations", tab_id="locations"),
+            ],
+            active_tab="charts",
+        )
+
+        return dbc.Container(
+            [
+                html.Div(
+                    [
+                        html.H1("Conductor Noise Tool 2026", className="display-4"),
+                        html.A("Log out", href="/logout", className="logout-button"),
+                    ],
+                    style={"display": "flex", "alignItems": "baseline"},
+                ),
+                html.P(f"Signed in as {current_user.name}."),
+                html.Hr(),
+                html.Div(tabs, id="tab-content", className="p-4"),
+            ],
+            fluid=True,
+            className="content",
         )
 
     register_site_callbacks(dash_app, backend_url)

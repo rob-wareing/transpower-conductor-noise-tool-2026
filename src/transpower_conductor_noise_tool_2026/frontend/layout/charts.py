@@ -1,6 +1,8 @@
 import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
 
+from .table_styles import EDITABLE_CELL_HIGHLIGHT
+
 CONDITION_OPTIONS = [
     {"label": "All", "value": "all"},
     {"label": "Wet", "value": "wet"},
@@ -141,7 +143,11 @@ def content(write_access: bool = False):
             ),
             html.Div(
                 dbc.Button(
-                    "Export plot data", id="chart-export-plot-button", size="sm", n_clicks=0
+                    "Export plot data",
+                    id="chart-export-plot-button",
+                    color="primary",
+                    size="sm",
+                    n_clicks=0,
                 ),
                 style={"marginBottom": "0.5rem"},
             ),
@@ -171,18 +177,21 @@ def content(write_access: bool = False):
                         page_size=25,
                         sort_action="native",
                         editable=write_access,
+                        style_data_conditional=EDITABLE_CELL_HIGHLIGHT,
                     ),
                     html.Div(
                         [
                             dbc.Button(
                                 "Save changes",
                                 id="chart-table-save-button",
+                                color="success",
                                 n_clicks=0,
                                 style=button_style,
                             ),
                             dbc.Button(
                                 "Export table data",
                                 id="chart-export-table-button",
+                                color="primary",
                                 n_clicks=0,
                             ),
                         ],

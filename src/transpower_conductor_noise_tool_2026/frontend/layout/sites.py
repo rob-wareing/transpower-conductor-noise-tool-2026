@@ -1,4 +1,7 @@
+import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
+
+from .table_styles import EDITABLE_CELL_HIGHLIGHT
 
 ALWAYS_READONLY_COLUMNS = {"noise_site_id", "site_name"}
 
@@ -29,14 +32,20 @@ def content(write_access: bool = False):
     return html.Div(
         [
             dcc.Interval(id="sites-init", interval=1000, n_intervals=0, max_intervals=1),
-            dash_table.DataTable(id="sites-table", columns=columns, data=[]),
-            html.Button(
+            dash_table.DataTable(
+                id="sites-table",
+                columns=columns,
+                data=[],
+                style_data_conditional=EDITABLE_CELL_HIGHLIGHT,
+            ),
+            dbc.Button(
                 "Save changes",
                 id="sites-save-button",
+                color="success",
                 n_clicks=0,
                 style={} if write_access else {"display": "none"},
             ),
-            html.Button("Export CSV", id="sites-export-button", n_clicks=0),
+            dbc.Button("Export CSV", id="sites-export-button", color="primary", n_clicks=0),
             dcc.Download(id="sites-download"),
             html.Div(id="sites-status"),
         ]

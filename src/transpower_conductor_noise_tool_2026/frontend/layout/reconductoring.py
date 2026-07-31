@@ -1,4 +1,7 @@
+import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
+
+from .table_styles import EDITABLE_CELL_HIGHLIGHT
 
 COLUMN_DEFS = [
     ("Site ID", "noise_site_id", "numeric"),
@@ -28,17 +31,25 @@ def content(write_access: bool = False):
                 data=[],
                 row_deletable=write_access,
                 editable=write_access,
+                style_data_conditional=EDITABLE_CELL_HIGHLIGHT,
             ),
-            html.Button(
-                "Add row", id="reconductoring-add-row-button", n_clicks=0, style=button_style
-            ),
-            html.Button(
-                "Save changes",
-                id="reconductoring-save-button",
+            dbc.Button(
+                "Add row",
+                id="reconductoring-add-row-button",
+                color="secondary",
                 n_clicks=0,
                 style=button_style,
             ),
-            html.Button("Export CSV", id="reconductoring-export-button", n_clicks=0),
+            dbc.Button(
+                "Save changes",
+                id="reconductoring-save-button",
+                color="success",
+                n_clicks=0,
+                style=button_style,
+            ),
+            dbc.Button(
+                "Export CSV", id="reconductoring-export-button", color="primary", n_clicks=0
+            ),
             dcc.Download(id="reconductoring-download"),
             html.Div(id="reconductoring-status"),
         ]

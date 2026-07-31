@@ -105,3 +105,19 @@ def test_process_readings_filters_and_computes_columns():
     assert third["is_wet"] is False
 
     assert (result["include"] == True).all()  # noqa: E712
+
+
+def test_calculate_leq_rmse_is_a_placeholder_that_always_returns_none():
+    # The NW API's per-period 1-second Leq data isn't parsed/ingested anywhere
+    # yet, so this can't compute a real value - locks in the placeholder
+    # behaviour until the real calculation replaces it.
+    assert processing_service.calculate_leq_rmse(_reading_row("2025-01-01T23:00:00")) is None
+
+
+def test_add_leq_rmse_adds_a_column_without_disturbing_others():
+    df = pd.DataFrame([_reading_row("2025-01-01T23:00:00"), _reading_row("2025-01-02T23:00:00")])
+
+    result = processing_service.add_leq_rmse(df)
+
+    assert list(result["leq_rmse"]) == [None, None]
+    assert result["wind_speed"].tolist() == [1.0, 1.0]

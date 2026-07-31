@@ -70,6 +70,8 @@ class ChartFilters(BaseModel):
     conductor_and_treatment: List[str] = []
     grease: List[str] = []
     plot_by: str = "datetime"
+    measurement_duration: int = 15
+    detection_logic: str = "original"
 
     @field_validator("interval_weeks")
     @classmethod
@@ -77,6 +79,20 @@ class ChartFilters(BaseModel):
         if 1 <= value <= 4:
             return value
         raise ValueError("interval_weeks must be between 1 and 4")
+
+    @field_validator("measurement_duration")
+    @classmethod
+    def validate_measurement_duration(cls, value):
+        if value in {1, 15}:
+            return value
+        raise ValueError("measurement_duration must be 1 or 15")
+
+    @field_validator("detection_logic")
+    @classmethod
+    def validate_detection_logic(cls, value):
+        if value in {"original", "updated_2026"}:
+            return value
+        raise ValueError("detection_logic must be 'original' or 'updated_2026'")
 
     @field_validator("plot_by")
     @classmethod

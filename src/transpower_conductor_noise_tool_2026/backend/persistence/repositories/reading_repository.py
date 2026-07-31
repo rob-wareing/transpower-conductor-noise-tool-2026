@@ -11,6 +11,13 @@ class ReadingRepository:
         )
         return row.datetime if row else None
 
+    def list_readings(self, noise_site_id):
+        return (
+            Reading.query.filter_by(noise_site_id=noise_site_id)
+            .order_by(Reading.datetime.asc())
+            .all()
+        )
+
     def upsert_readings(self, readings):
         # merge() keys off the (noise_site_id, datetime) primary key, so re-running
         # ingestion over an overlapping window updates existing rows instead of

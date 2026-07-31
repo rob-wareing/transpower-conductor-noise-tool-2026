@@ -11,7 +11,15 @@ class ProcessedReadingRepository:
         db.session.commit()
         return len(readings)
 
-    def list_readings(self, site_ids=None, start_datetime=None, end_datetime=None, is_wet=None):
+    def list_readings(
+        self,
+        site_ids=None,
+        start_datetime=None,
+        end_datetime=None,
+        is_wet=None,
+        measurement_duration_minutes=None,
+        detection_logic=None,
+    ):
         query = ProcessedReading.query
 
         if site_ids:
@@ -22,6 +30,12 @@ class ProcessedReadingRepository:
             query = query.filter(ProcessedReading.datetime <= end_datetime)
         if is_wet is not None:
             query = query.filter(ProcessedReading.is_wet == is_wet)
+        if measurement_duration_minutes is not None:
+            query = query.filter(
+                ProcessedReading.measurement_duration_minutes == measurement_duration_minutes
+            )
+        if detection_logic is not None:
+            query = query.filter(ProcessedReading.detection_logic == detection_logic)
 
         return query.order_by(
             ProcessedReading.noise_site_id.asc(), ProcessedReading.datetime.asc()

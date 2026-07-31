@@ -8,6 +8,7 @@ from transpower_conductor_noise_tool_2026.shared.contracts import ChartFilters, 
 from ..client import BackendClient
 
 EDITABLE_TABLE_FIELDS = ["is_wet", "include"]
+MEASUREMENT_DURATION_TO_MINUTES = {"1min": 1, "15min": 15}
 
 
 def _conductor_options(events, site_ids, field):
@@ -76,6 +77,8 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("chart-conductor-treatment", "value"),
         Input("chart-grease", "value"),
         Input("chart-plot-by", "value"),
+        Input("chart-measurement-duration", "value"),
+        Input("chart-detection-logic", "value"),
     )
     def refresh_charts(
         _n_intervals,
@@ -88,6 +91,8 @@ def register_callbacks(dash_app, backend_url: str | None):
         conductor_and_treatment,
         grease,
         plot_by,
+        measurement_duration,
+        detection_logic,
     ):
         empty_figure = {"data": [], "layout": {}}
         if client is None:
@@ -103,6 +108,8 @@ def register_callbacks(dash_app, backend_url: str | None):
             conductor_and_treatment=conductor_and_treatment or [],
             grease=grease or [],
             plot_by=plot_by or "datetime",
+            measurement_duration=MEASUREMENT_DURATION_TO_MINUTES.get(measurement_duration, 15),
+            detection_logic=detection_logic or "original",
         )
         charts = client.get_charts(filters)
         return charts["noise_chart"], charts["timeline_chart"]
@@ -127,9 +134,20 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("chart-conductor-treatment", "value"),
         Input("chart-grease", "value"),
         Input("chart-table-status", "children"),
+        Input("chart-measurement-duration", "value"),
+        Input("chart-detection-logic", "value"),
     )
     def refresh_chart_table(
-        _n_intervals, site_ids, start_date, end_date, condition, conductor_and_treatment, grease, _status
+        _n_intervals,
+        site_ids,
+        start_date,
+        end_date,
+        condition,
+        conductor_and_treatment,
+        grease,
+        _status,
+        measurement_duration,
+        detection_logic,
     ):
         if client is None:
             return []
@@ -141,6 +159,8 @@ def register_callbacks(dash_app, backend_url: str | None):
             condition=condition or "all",
             conductor_and_treatment=conductor_and_treatment or [],
             grease=grease or [],
+            measurement_duration=MEASUREMENT_DURATION_TO_MINUTES.get(measurement_duration, 15),
+            detection_logic=detection_logic or "original",
         )
         return [row.model_dump(mode="json") for row in client.get_chart_table_rows(filters)]
 

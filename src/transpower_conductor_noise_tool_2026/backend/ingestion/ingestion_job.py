@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from transpower_conductor_noise_tool_2026.backend.domain import processing_service
+from transpower_conductor_noise_tool_2026.backend.domain import processing_service_updated_2026
 from transpower_conductor_noise_tool_2026.backend.ingestion.nw_client import NoiseAndWeatherClient
 from transpower_conductor_noise_tool_2026.backend.persistence.models.processed_reading import (
     ProcessedReading,
@@ -65,10 +66,13 @@ def _reading_from_row(row):
         wind_speed=row["wind_speed"],
         wind_direction=row["wind_direction"],
         rain_mm=row["rain_mm"],
+        # Always present by the time this runs - processing_service.add_leq_rmse
+        # adds the column (currently always None, a placeholder - see there).
+        leq_rmse=row["leq_rmse"],
     )
 
 
-def _processed_reading_from_row(row):
+def _processed_reading_from_row(row, detection_logic):
     return ProcessedReading(
         noise_site_id=int(row["noise_site_id"]),
         datetime=row["datetime"],
@@ -79,6 +83,12 @@ def _processed_reading_from_row(row):
         rain2=row["rain2"],
         is_wet=bool(row["is_wet"]),
         include=bool(row["include"]),
+        detection_logic=detection_logic,
+        # Only the updated_2026 logic's own process_readings() adds a leq_rmse
+        # column to its output rows (copying the raw Reading's value across for
+        # measurements that pass its filters) - original-logic rows never carry
+        # that key, so this naturally resolves to None for them via .get().
+        leq_rmse=row.get("leq_rmse"),
     )
 
 
@@ -129,23 +139,36 @@ def collect_new_readings(
             continue
 
         if raw_df is None or raw_df.empty:
-            summary[noise_site_id] = {"readings": 0, "processed_readings": 0}
+            summary[noise_site_id] = {
+                "readings": 0,
+                "processed_readings_original": 0,
+                "processed_readings_updated_2026": 0,
+            }
             continue
 
         cleaned = processing_service.clean_readings(processing_service.rename_raw_columns(raw_df))
+        cleaned = processing_service.add_leq_rmse(cleaned)
 
         readings = [_reading_from_row(row) for _, row in cleaned.iterrows()]
         reading_repository.upsert_readings(readings)
 
-        processed_df = processing_service.process_readings(cleaned)
+        # Both detection logics run off the same cleaned raw data and write their
+        # own tagged ProcessedReading rows, side by side - "original" is never
+        # replaced, just joined by "updated_2026".
+        original_df = processing_service.process_readings(cleaned)
+        updated_2026_df = processing_service_updated_2026.process_readings(cleaned)
         processed_readings = [
-            _processed_reading_from_row(row) for _, row in processed_df.iterrows()
+            _processed_reading_from_row(row, "original") for _, row in original_df.iterrows()
+        ] + [
+            _processed_reading_from_row(row, "updated_2026")
+            for _, row in updated_2026_df.iterrows()
         ]
         processed_reading_repository.add_readings(processed_readings)
 
         summary[noise_site_id] = {
             "readings": len(readings),
-            "processed_readings": len(processed_readings),
+            "processed_readings_original": len(original_df),
+            "processed_readings_updated_2026": len(updated_2026_df),
         }
 
     return summary

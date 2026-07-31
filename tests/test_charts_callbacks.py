@@ -200,6 +200,8 @@ def _chart_inputs(**overrides):
         "chart-conductor-treatment.value": None,
         "chart-grease.value": None,
         "chart-plot-by.value": None,
+        "chart-measurement-duration.value": None,
+        "chart-detection-logic.value": None,
     }
     values.update(overrides)
     return [(key.split(".")[0], key.split(".")[1], value) for key, value in values.items()]
@@ -235,6 +237,8 @@ def test_refresh_charts_fills_in_defaults_for_falsy_inputs(fake_client):
     assert filters.conductor_and_treatment == []
     assert filters.grease == []
     assert filters.plot_by == "datetime"
+    assert filters.measurement_duration == 15
+    assert filters.detection_logic == "original"
 
 
 def test_refresh_charts_passes_through_explicit_filter_values(fake_client):
@@ -255,6 +259,8 @@ def test_refresh_charts_passes_through_explicit_filter_values(fake_client):
             "chart-conductor-treatment.value": ["Standard conductor (standard grease)"],
             "chart-grease.value": ["standard"],
             "chart-plot-by.value": "days_since_conductoring",
+            "chart-measurement-duration.value": "1min",
+            "chart-detection-logic.value": "updated_2026",
         }),
     )
 
@@ -266,6 +272,8 @@ def test_refresh_charts_passes_through_explicit_filter_values(fake_client):
     assert filters.conductor_and_treatment == ["Standard conductor (standard grease)"]
     assert filters.grease == ["standard"]
     assert filters.plot_by == "days_since_conductoring"
+    assert filters.measurement_duration == 1
+    assert filters.detection_logic == "updated_2026"
 
 
 def test_refresh_charts_returns_empty_figures_when_no_backend():
@@ -354,6 +362,8 @@ def test_refresh_chart_table_does_not_send_parameter_interval_or_plot_by(fake_cl
             ("chart-conductor-treatment", "value", None),
             ("chart-grease", "value", None),
             ("chart-table-status", "children", None),
+            ("chart-measurement-duration", "value", None),
+            ("chart-detection-logic", "value", None),
         ],
     )
 
@@ -366,6 +376,8 @@ def test_refresh_chart_table_does_not_send_parameter_interval_or_plot_by(fake_cl
     assert filters.condition == "all"
     assert filters.conductor_and_treatment == []
     assert filters.grease == []
+    assert filters.measurement_duration == 15
+    assert filters.detection_logic == "original"
     # Fields this callback's filters never set explicitly - confirm they
     # stay at ChartFilters' own defaults rather than picking up some other
     # tab's dropdown value by accident.
@@ -389,6 +401,8 @@ def test_refresh_chart_table_returns_empty_list_when_no_backend():
             ("chart-conductor-treatment", "value", None),
             ("chart-grease", "value", None),
             ("chart-table-status", "children", None),
+            ("chart-measurement-duration", "value", None),
+            ("chart-detection-logic", "value", None),
         ],
     )
 

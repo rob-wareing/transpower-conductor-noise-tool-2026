@@ -16,6 +16,12 @@ class ProcessedReading(db.Model):
     rain2 = db.Column(db.Numeric(3, 1), nullable=False)
     is_wet = db.Column(db.Boolean, nullable=False)
     include = db.Column(db.Boolean, nullable=False, default=True)
+    measurement_duration_minutes = db.Column(db.Integer, nullable=False, default=15)
+    detection_logic = db.Column(db.String(20), nullable=False, default="original")
+    # Copied across from Reading.leq_rmse only for rows processed by the
+    # updated_2026 detection logic (see processing_service_updated_2026.py) -
+    # always NULL for "original"-tagged rows.
+    leq_rmse = db.Column(db.Numeric(5, 2), nullable=True)
 
     __table_args__ = (
         db.ForeignKeyConstraint(

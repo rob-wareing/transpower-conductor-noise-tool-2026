@@ -71,7 +71,10 @@ def _shift_down_by_one(series):
 def _filter_by_time(df):
     # start excluded, end included - matches the old app's include_start=False,
     # include_end=True (that kwarg pair was removed in newer pandas in favour of
-    # this single `inclusive` argument).
+    # this single `inclusive` argument). This right-inclusive boundary convention
+    # is deliberately kept identical for every detection-logic variant (see
+    # processing_service_updated_2026.py's own _filter_by_time) - only the window
+    # boundary *times* differ between logics, never which end is inclusive.
     return df.between_time(*TIME_RANGE, inclusive="right")
 
 
@@ -81,6 +84,31 @@ def _filter_by_wind(df):
 
 def _filter_by_leq_l90_diff(df):
     return df.loc[(df["leq"] - df["l90"]) <= MAX_LEQ_L90_DIFF]
+
+
+def add_tone_columns(df):
+    # "tone excess": the center band's level minus the average of its two flanking
+    # bands. Not a copy of any raw field. Shared by every detection-logic variant
+    # (see processing_service_updated_2026.py) since the formula itself doesn't
+    # change between them - only the surrounding filters/thresholds do.
+    df["tone_100hz"] = (df["leq_100hz"] - (df["leq_80hz"] + df["leq_125hz"]) / 2).round(2)
+    df["tone_200hz"] = (df["leq_200hz"] - (df["leq_160hz"] + df["leq_250hz"]) / 2).round(2)
+    return df
+
+
+def calculate_leq_rmse(row):
+    # Placeholder - the NW API's per-period 1-second Leq data isn't parsed or
+    # ingested anywhere yet, so there's nothing to compute an RMSE from. Always
+    # returns None until that data exists; the real calculation replaces this
+    # body then. Lives here (not in either detection-logic module) because
+    # it's a property of the raw measurement itself, computed the same way
+    # regardless of which detection logic later filters on it.
+    return None
+
+
+def add_leq_rmse(df):
+    df["leq_rmse"] = df.apply(calculate_leq_rmse, axis=1)
+    return df
 
 
 def process_readings(readings_df):
@@ -95,10 +123,7 @@ def process_readings(readings_df):
     df = _filter_by_wind(df)
     df = _filter_by_leq_l90_diff(df)
 
-    # "tone excess": the center band's level minus the average of its two flanking
-    # bands. Not a copy of any raw field.
-    df["tone_100hz"] = (df["leq_100hz"] - (df["leq_80hz"] + df["leq_125hz"]) / 2).round(2)
-    df["tone_200hz"] = (df["leq_200hz"] - (df["leq_160hz"] + df["leq_250hz"]) / 2).round(2)
+    df = add_tone_columns(df)
     df["is_wet"] = (df["rain1"] > 0) | (df["rain2"] > 0)
     df["include"] = True
 

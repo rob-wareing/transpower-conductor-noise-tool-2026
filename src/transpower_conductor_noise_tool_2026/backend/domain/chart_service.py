@@ -450,6 +450,8 @@ def _fetch_filtered_readings_dataframe(
         start_datetime=start_datetime,
         end_datetime=end_datetime,
         is_wet=is_wet,
+        measurement_duration_minutes=filters.measurement_duration,
+        detection_logic=filters.detection_logic,
     )
     sites_by_id = {site.noise_site_id: site for site in site_repository.list_sites()}
 

@@ -232,6 +232,97 @@ def test_charts_endpoint_rejects_invalid_plot_by(tmp_path, monkeypatch):
     assert response.status_code == 400
 
 
+def test_charts_endpoint_defaults_to_15_minute_readings(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    # All seeded demo ProcessedReading rows are 15-minute measurements, so the
+    # default measurement_duration filter (15) should behave identically to
+    # not filtering at all.
+    response = client.post("/api/charts", json={"noise_site_id": [51]})
+
+    assert response.status_code == 200
+    assert _noise_chart_point_count(response) > 0
+
+
+def test_charts_endpoint_1_minute_duration_returns_no_data(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    # No seeded data is a 1-minute measurement yet, so this filter should
+    # exclude every reading.
+    response = client.post(
+        "/api/charts", json={"noise_site_id": [51], "measurement_duration": 1}
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["noise_chart"]["data"] == []
+
+
+def test_charts_endpoint_rejects_invalid_measurement_duration(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.post("/api/charts", json={"measurement_duration": 5})
+
+    assert response.status_code == 400
+
+
+def test_charts_table_endpoint_1_minute_duration_returns_no_rows(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/api/charts/table", json={"noise_site_id": [51], "measurement_duration": 1}
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["items"] == []
+
+
+def test_charts_endpoint_defaults_to_original_detection_logic(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    # All seeded demo ProcessedReading rows are tagged detection_logic="original"
+    # (the model's own default), so the default filter should behave identically
+    # to not filtering at all.
+    response = client.post("/api/charts", json={"noise_site_id": [51]})
+
+    assert response.status_code == 200
+    assert _noise_chart_point_count(response) > 0
+
+
+def test_charts_endpoint_updated_2026_detection_logic_returns_no_data(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    # No seeded data has been processed through the new detection logic yet
+    # (that only happens via real ingestion or the backfill script), so this
+    # filter should exclude every reading.
+    response = client.post(
+        "/api/charts", json={"noise_site_id": [51], "detection_logic": "updated_2026"}
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["noise_chart"]["data"] == []
+
+
+def test_charts_endpoint_rejects_invalid_detection_logic(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.post("/api/charts", json={"detection_logic": "not-a-real-logic"})
+
+    assert response.status_code == 400
+
+
+def test_charts_table_endpoint_updated_2026_detection_logic_returns_no_rows(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/api/charts/table", json={"noise_site_id": [51], "detection_logic": "updated_2026"}
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["items"] == []
+
+
 def test_charts_table_endpoint_returns_augmented_rows(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
 

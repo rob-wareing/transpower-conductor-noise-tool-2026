@@ -85,18 +85,59 @@ def test_collect_new_readings_persists_readings_and_processed_readings(tmp_path,
         )
 
         # AUTO_SEED_DATA also seeds demo ProcessedReading rows for this site (from
-        # Slice C's synthetic fixture) - compare against a baseline instead of an
-        # absolute count.
+        # Slice C's synthetic fixture, all implicitly tagged detection_logic=
+        # "original" via the model default) - compare against per-tag baselines
+        # instead of absolute counts.
         processed_before = ProcessedReading.query.filter_by(noise_site_id=KNOWN_SITE).count()
+        original_before = ProcessedReading.query.filter_by(
+            noise_site_id=KNOWN_SITE, detection_logic="original"
+        ).count()
+        updated_2026_before = ProcessedReading.query.filter_by(
+            noise_site_id=KNOWN_SITE, detection_logic="updated_2026"
+        ).count()
 
         summary = ingestion_job.collect_new_readings(client=client)
 
-        assert summary[KNOWN_SITE] == {"readings": 2, "processed_readings": 1}
+        # The one surviving night-time, low-wind, low-rain reading passes both
+        # detection logics' filters, so each writes its own tagged row.
+        assert summary[KNOWN_SITE] == {
+            "readings": 2,
+            "processed_readings_original": 1,
+            "processed_readings_updated_2026": 1,
+        }
         assert Reading.query.filter_by(noise_site_id=KNOWN_SITE).count() == 2
         assert (
             ProcessedReading.query.filter_by(noise_site_id=KNOWN_SITE).count()
-            == processed_before + 1
+            == processed_before + 2
         )
+        assert (
+            ProcessedReading.query.filter_by(
+                noise_site_id=KNOWN_SITE, detection_logic="original"
+            ).count()
+            == original_before + 1
+        )
+        assert (
+            ProcessedReading.query.filter_by(
+                noise_site_id=KNOWN_SITE, detection_logic="updated_2026"
+            ).count()
+            == updated_2026_before + 1
+        )
+
+        # leq_rmse wiring check only - not a behavioural test, since the real
+        # calculation is still a placeholder that always returns None (see
+        # test_processing_service.py::test_calculate_leq_rmse_is_a_placeholder...).
+        # Confirms the column is set (not left unset/omitted) on both the raw
+        # Reading row and the updated_2026 ProcessedReading row.
+        reading = Reading.query.filter_by(noise_site_id=KNOWN_SITE).first()
+        assert reading.leq_rmse is None
+        updated_2026_row = ProcessedReading.query.filter_by(
+            noise_site_id=KNOWN_SITE, detection_logic="updated_2026"
+        ).first()
+        assert updated_2026_row.leq_rmse is None
+        original_row = ProcessedReading.query.filter_by(
+            noise_site_id=KNOWN_SITE, detection_logic="original"
+        ).first()
+        assert original_row.leq_rmse is None
 
 
 def test_collect_new_readings_site_ids_scopes_to_named_sites_only(tmp_path, monkeypatch):

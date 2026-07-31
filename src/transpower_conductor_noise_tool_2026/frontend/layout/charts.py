@@ -17,6 +17,16 @@ PARAMETER_OPTIONS = [
 
 INTERVAL_WEEKS_OPTIONS = [{"label": f"{n} week{'s' if n != 1 else ''}", "value": n} for n in range(1, 5)]
 
+MEASUREMENT_DURATION_OPTIONS = [
+    {"label": "1 minute", "value": "1min"},
+    {"label": "15 minutes", "value": "15min"},
+]
+
+DETECTION_LOGIC_OPTIONS = [
+    {"label": "Original", "value": "original"},
+    {"label": "Updated 2026", "value": "updated_2026"},
+]
+
 PLOT_BY_OPTIONS = [
     {"label": "Date", "value": "datetime"},
     {"label": "Days since conductoring", "value": "days_since_conductoring"},
@@ -56,90 +66,133 @@ def content(write_access: bool = False):
             dcc.Interval(id="chart-init", interval=1000, n_intervals=0, max_intervals=1),
             html.Div(
                 [
+                    # Row 1: Sites
                     html.Div(
-                        [
-                            html.Label("Sites"),
-                            dcc.Dropdown(id="chart-site-select", multi=True),
-                        ],
-                        style={"minWidth": "250px"},
+                        html.Div(
+                            [
+                                html.Label("Sites"),
+                                dcc.Dropdown(id="chart-site-select", multi=True),
+                            ],
+                            style={"minWidth": "500px", "maxWidth": "900px"},
+                        ),
+                        style={"display": "flex", "marginBottom": "1rem"},
                     ),
+                    # Row 2: Date range
                     html.Div(
-                        [
-                            html.Label("Date range"),
-                            dcc.DatePickerRange(id="chart-date-range"),
-                        ]
+                        html.Div(
+                            [
+                                html.Label("Date range"),
+                                dcc.DatePickerRange(id="chart-date-range"),
+                            ]
+                        ),
+                        style={"display": "flex", "marginBottom": "1rem"},
                     ),
+                    # Row 3: Condition, Parameter, Aggregation period
                     html.Div(
                         [
-                            html.Label("Condition"),
-                            dcc.Dropdown(
-                                id="chart-condition", options=CONDITION_OPTIONS, value="all"
+                            html.Div(
+                                [
+                                    html.Label("Condition"),
+                                    dcc.Dropdown(
+                                        id="chart-condition",
+                                        options=CONDITION_OPTIONS,
+                                        value="all",
+                                    ),
+                                ],
+                                style={"minWidth": "150px"},
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Parameter"),
+                                    dcc.Dropdown(
+                                        id="chart-parameter",
+                                        options=PARAMETER_OPTIONS,
+                                        value="tone_100hz",
+                                    ),
+                                ],
+                                style={"minWidth": "180px"},
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Aggregation period"),
+                                    dcc.Dropdown(
+                                        id="chart-interval-weeks",
+                                        options=INTERVAL_WEEKS_OPTIONS,
+                                        value=2,
+                                        clearable=False,
+                                    ),
+                                ],
+                                style={"minWidth": "160px"},
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Measurement duration"),
+                                    dcc.Dropdown(
+                                        id="chart-measurement-duration",
+                                        options=MEASUREMENT_DURATION_OPTIONS,
+                                        value="15min",
+                                        clearable=False,
+                                    ),
+                                ],
+                                style={"minWidth": "180px"},
                             ),
                         ],
-                        style={"minWidth": "150px"},
+                        style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
                     ),
+                    # Row 4: Conductor and treatment (+ detection logic below it), Grease
                     html.Div(
                         [
-                            html.Label("Parameter"),
-                            dcc.Dropdown(
-                                id="chart-parameter",
-                                options=PARAMETER_OPTIONS,
-                                value="tone_100hz",
+                            html.Div(
+                                [
+                                    html.Label("Conductor and treatment"),
+                                    dcc.Dropdown(
+                                        id="chart-conductor-treatment",
+                                        options=[],
+                                        value=[],
+                                        multi=True,
+                                        placeholder="All",
+                                    ),
+                                    html.Label("Detection logic", style={"marginTop": "0.5rem"}),
+                                    dcc.Dropdown(
+                                        id="chart-detection-logic",
+                                        options=DETECTION_LOGIC_OPTIONS,
+                                    ),
+                                ],
+                                style={"minWidth": "400px", "maxWidth": "700px"},
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Grease"),
+                                    dcc.Dropdown(
+                                        id="chart-grease",
+                                        options=[],
+                                        value=[],
+                                        multi=True,
+                                        placeholder="All",
+                                    ),
+                                ],
+                                style={"minWidth": "350px", "maxWidth": "600px"},
                             ),
                         ],
-                        style={"minWidth": "180px"},
+                        style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
                     ),
+                    # Row 5: Plot by
                     html.Div(
-                        [
-                            html.Label("Aggregation period"),
-                            dcc.Dropdown(
-                                id="chart-interval-weeks",
-                                options=INTERVAL_WEEKS_OPTIONS,
-                                value=2,
-                                clearable=False,
-                            ),
-                        ],
-                        style={"minWidth": "160px"},
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Conductor and treatment"),
-                            dcc.Dropdown(
-                                id="chart-conductor-treatment",
-                                options=[],
-                                value=[],
-                                multi=True,
-                                placeholder="All",
-                            ),
-                        ],
-                        style={"minWidth": "220px"},
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Grease"),
-                            dcc.Dropdown(
-                                id="chart-grease",
-                                options=[],
-                                value=[],
-                                multi=True,
-                                placeholder="All",
-                            ),
-                        ],
-                        style={"minWidth": "180px"},
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Plot by"),
-                            dcc.RadioItems(
-                                id="chart-plot-by",
-                                options=PLOT_BY_OPTIONS,
-                                value="datetime",
-                            ),
-                        ],
-                        style={"minWidth": "220px"},
+                        html.Div(
+                            [
+                                html.Label("Plot by"),
+                                dcc.RadioItems(
+                                    id="chart-plot-by",
+                                    options=PLOT_BY_OPTIONS,
+                                    value="datetime",
+                                ),
+                            ],
+                            style={"minWidth": "220px"},
+                        ),
+                        style={"display": "flex", "marginBottom": "1rem"},
                     ),
                 ],
-                style={"display": "flex", "gap": "1rem", "flexWrap": "wrap", "marginBottom": "1rem"},
+                style={"marginBottom": "1rem"},
             ),
             html.Div(
                 dbc.Button(

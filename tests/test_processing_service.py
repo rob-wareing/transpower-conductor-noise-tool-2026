@@ -121,3 +121,16 @@ def test_add_leq_rmse_adds_a_column_without_disturbing_others():
 
     assert list(result["leq_rmse"]) == [None, None]
     assert result["wind_speed"].tolist() == [1.0, 1.0]
+
+
+def test_clean_leq_rmse_converts_nan_to_none():
+    # A DataFrame column mixing real leq_rmse floats with missing values
+    # stores the missing ones as NaN (pandas' standard float64 behaviour),
+    # but PyMySQL rejects float('nan') outright - real values must pass
+    # through unchanged, and missing ones must become a real None so they
+    # bind as SQL NULL instead of erroring.
+    df = pd.DataFrame([{"leq_rmse": 0.42}, {"leq_rmse": None}])
+
+    assert processing_service.clean_leq_rmse(df.iloc[0]["leq_rmse"]) == 0.42
+    assert processing_service.clean_leq_rmse(df.iloc[1]["leq_rmse"]) is None
+    assert processing_service.clean_leq_rmse(None) is None

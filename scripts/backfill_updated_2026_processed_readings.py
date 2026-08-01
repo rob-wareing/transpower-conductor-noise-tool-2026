@@ -17,8 +17,15 @@ has ingested Reading history.
 
 A site already carrying "updated_2026" rows is skipped (reported, not
 overwritten) unless --force, in which case its existing "updated_2026" rows
-are deleted and regenerated (add_readings() is a pure append, so re-running
-without --force would otherwise duplicate rows).
+are deleted and regenerated (inserts are pure appends, so re-running without
+--force would otherwise duplicate rows) - EXCEPT when every one of its
+existing "updated_2026" rows has leq_rmse = NULL, which only happens if they
+were generated before real leq_rmse data existed (calculate_leq_rmse always
+returned None until scripts/import_leq_rmse_from_sqlite.py loaded real
+values). That's treated as stale and auto-regenerated even without --force,
+so real RMSE data actually gets used (both for the leq_rmse filter and the
+copied-through processed_reading.leq_rmse value) without having to remember
+to pass --force by hand for every previously-run site.
 
 Usage:
     DATABASE_URL=mysql+pymysql://... python scripts/backfill_updated_2026_processed_readings.py [--dry-run] [--force]
@@ -27,14 +34,12 @@ Usage:
 import argparse
 
 import pandas as pd
+import sqlalchemy as sa
 
 from transpower_conductor_noise_tool_2026.backend.app import create_app
 from transpower_conductor_noise_tool_2026.backend.domain import processing_service
 from transpower_conductor_noise_tool_2026.backend.domain import processing_service_updated_2026
 from transpower_conductor_noise_tool_2026.backend.extensions import db
-from transpower_conductor_noise_tool_2026.backend.ingestion.ingestion_job import (
-    _processed_reading_from_row,
-)
 from transpower_conductor_noise_tool_2026.backend.persistence.models.processed_reading import (
     ProcessedReading,
 )
@@ -47,6 +52,19 @@ from transpower_conductor_noise_tool_2026.backend.persistence.repositories.readi
 from transpower_conductor_noise_tool_2026.backend.persistence.repositories.site_repository import (
     SiteRepository,
 )
+
+# How many rows go into a single bulk INSERT statement. A site's rows are
+# still committed as one all-or-nothing unit (see the "existing" skip check
+# below - it assumes a site is either fully done or not started at all), but
+# a single multi-thousand-row Core bulk insert keeps each site's connection
+# checkout short - the earlier row-by-row ORM `session.add()` loop kept a
+# connection checked out for minutes on a large site, which is what triggered
+# repeated "Lost connection to MySQL server during query" failures against
+# the external fork's managed MySQL instance (a connection-age limit, not a
+# transaction-size one - confirmed by two crashes at two different, arbitrary
+# points partway through unrelated sites, both after several cumulative
+# minutes of connection use).
+BULK_INSERT_CHUNK_SIZE = 5000
 
 
 def _reading_to_row(reading):
@@ -66,6 +84,46 @@ def _reading_to_row(reading):
         "rain_mm": float(reading.rain_mm) if reading.rain_mm is not None else None,
         "leq_rmse": float(reading.leq_rmse) if reading.leq_rmse is not None else None,
     }
+
+
+def _processed_reading_dict(row, detection_logic):
+    # Same field mapping as ingestion_job.py::_processed_reading_from_row, but
+    # returns a plain dict for a Core bulk insert instead of an ORM object for
+    # session.add() - see BULK_INSERT_CHUNK_SIZE above for why.
+    return {
+        "noise_site_id": int(row["noise_site_id"]),
+        "datetime": row["datetime"],
+        "l90": row["l90"],
+        "tone_100hz": row["tone_100hz"],
+        "tone_200hz": row["tone_200hz"],
+        "rain1": row["rain1"],
+        "rain2": row["rain2"],
+        "is_wet": bool(row["is_wet"]),
+        "include": bool(row["include"]),
+        "detection_logic": detection_logic,
+        # A DataFrame column mixing real leq_rmse floats with missing values
+        # stores the missing ones as NaN, not None (pandas' standard float64
+        # behaviour) - PyMySQL rejects float('nan') outright, so this must go
+        # through clean_leq_rmse before it can be written.
+        "leq_rmse": processing_service.clean_leq_rmse(row.get("leq_rmse")),
+    }
+
+
+def _is_stale(existing):
+    # All-NULL leq_rmse across every existing row means they were generated
+    # before real RMSE data existed for this site (see the module docstring) -
+    # treat as needing a refresh even without --force. Any row with a real
+    # (non-NULL) value means this site was already (re)generated after real
+    # data landed, so it's left alone on a repeat run.
+    return bool(existing) and all(row.leq_rmse is None for row in existing)
+
+
+def _bulk_insert_processed_readings(records):
+    table = ProcessedReading.__table__
+    for start in range(0, len(records), BULK_INSERT_CHUNK_SIZE):
+        chunk = records[start : start + BULK_INSERT_CHUNK_SIZE]
+        db.session.execute(sa.insert(table), chunk)
+    db.session.commit()
 
 
 def main():
@@ -93,12 +151,18 @@ def main():
             existing = processed_reading_repository.list_readings(
                 site_ids=[site.noise_site_id], detection_logic="updated_2026"
             )
-            if existing and not args.force:
+            stale = _is_stale(existing)
+            if existing and not stale and not args.force:
                 print(
                     f"site={site.noise_site_id} {site.site_name!r}: skipping, already has "
-                    f"{len(existing)} updated_2026 rows (use --force to regenerate)"
+                    f"{len(existing)} up-to-date updated_2026 rows (use --force to regenerate anyway)"
                 )
                 continue
+            if existing and stale and not args.force:
+                print(
+                    f"site={site.noise_site_id} {site.site_name!r}: existing {len(existing)} updated_2026 "
+                    f"rows all predate real leq_rmse data - regenerating"
+                )
 
             df = pd.DataFrame([_reading_to_row(r) for r in readings])
             cleaned = processing_service.clean_readings(df)
@@ -110,6 +174,7 @@ def main():
             )
 
             if args.dry_run:
+                total_inserted += len(processed_df)
                 continue
 
             if existing:
@@ -118,12 +183,12 @@ def main():
                 ).delete()
                 db.session.commit()
 
-            processed_readings = [
-                _processed_reading_from_row(row, "updated_2026")
+            records = [
+                _processed_reading_dict(row, "updated_2026")
                 for _, row in processed_df.iterrows()
             ]
-            processed_reading_repository.add_readings(processed_readings)
-            total_inserted += len(processed_readings)
+            _bulk_insert_processed_readings(records)
+            total_inserted += len(records)
 
         print(f"\n{'Would insert' if args.dry_run else 'Inserted'} {total_inserted} updated_2026 rows total.")
 

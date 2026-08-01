@@ -111,6 +111,18 @@ def add_leq_rmse(df):
     return df
 
 
+def clean_leq_rmse(value):
+    # A DataFrame column mixing real leq_rmse floats with missing values (some
+    # readings have real RMSE data, others don't) stores the missing ones as
+    # float NaN, not Python None - pandas' standard behaviour for a float64
+    # column. PyMySQL has no way to represent NaN (it explicitly raises rather
+    # than silently converting), so anything about to be written to the DB
+    # must go through this first. A uniform all-None column (every value
+    # missing) stays as plain None and never needed this - which is why this
+    # surfaced only once real, partial RMSE data existed, not before.
+    return None if pd.isna(value) else value
+
+
 def process_readings(readings_df):
     df = readings_df.set_index("datetime")
     df = df.rename(columns={"rain_mm": "rain1"})

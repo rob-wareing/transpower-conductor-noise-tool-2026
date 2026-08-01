@@ -1,6 +1,8 @@
 import pandas as pd
+import pytest
 
 from transpower_conductor_noise_tool_2026.backend.app import create_app
+from transpower_conductor_noise_tool_2026.backend.domain import processing_service
 from transpower_conductor_noise_tool_2026.backend.ingestion import ingestion_job
 from transpower_conductor_noise_tool_2026.backend.persistence.models.processed_reading import (
     ProcessedReading,
@@ -11,6 +13,11 @@ KNOWN_SITE = 115  # from data/site.csv, not in IGNORE_SITES
 OTHER_KNOWN_SITE = 137  # from data/site.csv, not in IGNORE_SITES
 IGNORED_SITE = 51  # in data/site.csv, but also in IGNORE_SITES
 UNKNOWN_SITE = 9999  # not in data/site.csv at all
+
+# A real 10-value slice from local_data/example_leq900.txt (all valid, no "A"
+# tokens) - enough to exercise a real calculate_leq_rmse computation here
+# rather than a synthetic string.
+LEQ900_SAMPLE = "44.5|45.4|44.6|44.2|42.8|42.8|44.0|44.6|44.5|44.2"
 
 
 class FakeClient:
@@ -42,6 +49,7 @@ def _raw_events_df(noise_site_id, timestamps):
                 "Wind": 1.0,
                 "Dir": 180,
                 "Rain": 0.0,
+                "Leq900": LEQ900_SAMPLE,
             }
         )
     df = pd.DataFrame(rows).set_index("date_time")
@@ -123,17 +131,21 @@ def test_collect_new_readings_persists_readings_and_processed_readings(tmp_path,
             == updated_2026_before + 1
         )
 
-        # leq_rmse wiring check only - not a behavioural test, since the real
-        # calculation is still a placeholder that always returns None (see
-        # test_processing_service.py::test_calculate_leq_rmse_is_a_placeholder...).
-        # Confirms the column is set (not left unset/omitted) on both the raw
-        # Reading row and the updated_2026 ProcessedReading row.
+        # leq_rmse wiring check: confirms a real value (computed from the raw
+        # Leq900 sample via calculate_leq_rmse) flows through to both the raw
+        # Reading row and the updated_2026 ProcessedReading row - the
+        # "original"-tagged row correctly never carries one, by design (its
+        # own PROCESSED_READING_COLUMNS has no such field, independent of
+        # whether a real value was computed - see processing_service_updated_2026.py).
+        expected_rmse = processing_service.calculate_leq_rmse({"leq900": LEQ900_SAMPLE})
+        assert expected_rmse is not None  # sanity check on the fixture itself
+
         reading = Reading.query.filter_by(noise_site_id=KNOWN_SITE).first()
-        assert reading.leq_rmse is None
+        assert float(reading.leq_rmse) == pytest.approx(expected_rmse, abs=0.01)
         updated_2026_row = ProcessedReading.query.filter_by(
             noise_site_id=KNOWN_SITE, detection_logic="updated_2026"
         ).first()
-        assert updated_2026_row.leq_rmse is None
+        assert float(updated_2026_row.leq_rmse) == pytest.approx(expected_rmse, abs=0.01)
         original_row = ProcessedReading.query.filter_by(
             noise_site_id=KNOWN_SITE, detection_logic="original"
         ).first()

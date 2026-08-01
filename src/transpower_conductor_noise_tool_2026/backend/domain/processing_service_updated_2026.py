@@ -41,14 +41,12 @@ def _filter_by_wind(df):
 
 def _filter_by_leq_rmse(df):
     # leq_rmse flows in as a real column (processing_service.add_leq_rmse adds
-    # it before this runs), but its value is always None today - the
-    # calculation itself is a placeholder (see calculate_leq_rmse) until the
-    # NW API's per-period 1-second Leq data is parsed and ingested. "If it
-    # exists" means this is a no-op today and activates for real the moment
-    # real values start flowing in, with no code change needed here. The
-    # column-missing guard is only a defensive fallback for callers that build
-    # a DataFrame directly without going through the standard pipeline (e.g.
-    # some of this module's own tests).
+    # it before this runs), computed from the NW API's Leq900 1-second series
+    # (see calculate_leq_rmse) - NULL when that data was missing or too sparse
+    # to fit. "If it exists" means a NULL value passes the filter rather than
+    # being dropped. The column-missing guard is only a defensive fallback for
+    # callers that build a DataFrame directly without going through the
+    # standard pipeline (e.g. some of this module's own tests).
     if "leq_rmse" not in df.columns:
         return df
     return df.loc[df["leq_rmse"].isna() | (df["leq_rmse"] <= MAX_LEQ_RMSE)]

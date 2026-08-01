@@ -21,8 +21,10 @@ class Reading(db.Model):
     rain_mm = db.Column(db.Numeric(3, 1), nullable=True)
 
     measurement_duration_minutes = db.Column(db.Integer, nullable=False, default=15)
-    # RMSE of Leq for the period - not yet populated by any ingestion path (the
-    # NW API has no such field today); stays NULL until a future source exists.
+    # RMSE of Leq for the period - a straight-line fit between the NW API's
+    # Leq900 1-second series and time, root-mean-squared over the fit's
+    # residuals (see processing_service.calculate_leq_rmse). NULL if the
+    # period's Leq900 data was missing or too sparse to fit meaningfully.
     # See processing_service_updated_2026.py, the only thing that reads it.
     leq_rmse = db.Column(db.Numeric(5, 2), nullable=True)
 

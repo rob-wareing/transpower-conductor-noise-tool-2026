@@ -18,6 +18,7 @@ def test_rename_raw_columns_maps_api_field_names():
                 "Wind": 1.0,
                 "Dir": 180,
                 "Rain": 0.0,
+                "Leq900": "40.0|41.0|42.0",
                 "noise_site_id": 51,
             }
         ],
@@ -30,6 +31,7 @@ def test_rename_raw_columns_maps_api_field_names():
     assert renamed.loc[0, "l90"] == 48.0
     assert renamed.loc[0, "leq_100hz"] == 35.0
     assert renamed.loc[0, "datetime"] == pd.Timestamp("2025-01-01T23:00:00")
+    assert renamed.loc[0, "leq900"] == "40.0|41.0|42.0"
 
 
 def test_clean_readings_clamps_out_of_range_values_and_drops_duplicates():
@@ -107,14 +109,54 @@ def test_process_readings_filters_and_computes_columns():
     assert (result["include"] == True).all()  # noqa: E712
 
 
-def test_calculate_leq_rmse_is_a_placeholder_that_always_returns_none():
-    # The NW API's per-period 1-second Leq data isn't parsed/ingested anywhere
-    # yet, so this can't compute a real value - locks in the placeholder
-    # behaviour until the real calculation replaces it.
-    assert processing_service.calculate_leq_rmse(_reading_row("2025-01-01T23:00:00")) is None
+def test_calculate_leq_rmse_perfectly_linear_series_has_zero_rmse():
+    # A perfectly linear series fits its own regression line exactly - zero
+    # residuals, zero RMSE.
+    row = {"leq900": "10.0|20.0|30.0|40.0|50.0|60.0|70.0|80.0|90.0|100.0"}
+    assert processing_service.calculate_leq_rmse(row) == 0.0
+
+
+def test_calculate_leq_rmse_matches_hand_computed_value():
+    # t=[0,1,2], y=[0,0,3] - OLS slope=1.5, intercept=-0.5, residuals
+    # [0.5,-1.0,0.5], RMSE=sqrt(0.5)=0.7071... -> rounds to 0.71.
+    row = {"leq900": "0|0|3"}
+    assert processing_service.calculate_leq_rmse(row) == 0.71
+
+
+def test_calculate_leq_rmse_null_tokens_keep_their_original_position_as_time():
+    # tokens at positions 0..5: "0", A, A, "9", A, "12" - the three valid
+    # values sit at t=0, t=3, t=5 (their real position in the 900-token
+    # series), not renumbered to t=0,1,2. Hand-computed OLS over
+    # t=[0,3,5], y=[0,9,12] gives RMSE=0.8429... -> rounds to 0.84.
+    # If the null tokens were instead dropped and the survivors renumbered to
+    # t=[0,1,2], the fit would be a different line (slope=6, intercept=1)
+    # giving RMSE=sqrt(2)=1.41 instead - a materially different result,
+    # confirming positions are preserved rather than compacted.
+    row = {"leq900": "0|A|A|9|A|12"}
+    assert processing_service.calculate_leq_rmse(row) == 0.84
+
+
+def test_calculate_leq_rmse_returns_none_when_leq900_missing():
+    assert processing_service.calculate_leq_rmse({}) is None
+    assert processing_service.calculate_leq_rmse({"leq900": None}) is None
+
+
+def test_calculate_leq_rmse_returns_none_below_min_valid_fraction():
+    # 10 tokens, only 4 valid (40%) - below the 50% LEQ900_MIN_VALID_FRACTION
+    # threshold, even though 4 valid points would otherwise be enough to fit.
+    row = {"leq900": "1|2|3|4|A|A|A|A|A|A"}
+    assert processing_service.calculate_leq_rmse(row) is None
+
+
+def test_calculate_leq_rmse_returns_none_with_fewer_than_two_tokens():
+    row = {"leq900": "42.0"}
+    assert processing_service.calculate_leq_rmse(row) is None
 
 
 def test_add_leq_rmse_adds_a_column_without_disturbing_others():
+    # Rows without a "leq900" key (the shape every other processing_service
+    # test's _reading_row fixture uses) correctly resolve to None rather than
+    # erroring - add_leq_rmse just applies calculate_leq_rmse per row.
     df = pd.DataFrame([_reading_row("2025-01-01T23:00:00"), _reading_row("2025-01-02T23:00:00")])
 
     result = processing_service.add_leq_rmse(df)

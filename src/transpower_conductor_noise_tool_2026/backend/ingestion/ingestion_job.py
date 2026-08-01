@@ -67,7 +67,8 @@ def _reading_from_row(row):
         wind_direction=row["wind_direction"],
         rain_mm=row["rain_mm"],
         # Always present by the time this runs - processing_service.add_leq_rmse
-        # adds the column (currently always None, a placeholder - see there).
+        # adds the column, computed from the raw Leq900 1-second series (see
+        # calculate_leq_rmse) or None if that data was missing/too sparse.
         # clean_leq_rmse converts a pandas-NaN missing value to a real SQL
         # NULL - PyMySQL rejects float('nan') outright.
         leq_rmse=processing_service.clean_leq_rmse(row["leq_rmse"]),
@@ -87,9 +88,10 @@ def _processed_reading_from_row(row, detection_logic):
         include=bool(row["include"]),
         detection_logic=detection_logic,
         # Only the updated_2026 logic's own process_readings() adds a leq_rmse
-        # column to its output rows (copying the raw Reading's value across for
-        # measurements that pass its filters) - original-logic rows never carry
-        # that key, so this naturally resolves to None for them via .get().
+        # column to its output rows (copying the raw Reading's computed value
+        # across for measurements that pass its filters) - original-logic rows
+        # never carry that key, so this naturally resolves to None for them
+        # via .get().
         # clean_leq_rmse converts a pandas-NaN missing value to a real SQL
         # NULL - PyMySQL rejects float('nan') outright.
         leq_rmse=processing_service.clean_leq_rmse(row.get("leq_rmse")),

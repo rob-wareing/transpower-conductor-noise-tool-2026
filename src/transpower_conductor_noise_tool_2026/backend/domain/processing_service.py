@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 TIME_RANGE = ("22:00:00", "07:00:00")
@@ -6,6 +7,17 @@ MAX_LEQ_L90_DIFF = 2.0
 
 MAX_VALID_WIND_SPEED = 999.9
 MAX_VALID_RAIN_FALL = 99.9
+
+# Leq900: the NW API's per-period 1-second Leq series - 900 pipe-separated
+# values (900 seconds = the 15-minute measurement_duration_minutes default),
+# with missing seconds represented by the literal token "A". See
+# calculate_leq_rmse below for what this feeds into.
+LEQ900_SEPARATOR = "|"
+LEQ900_NULL_TOKEN = "A"
+# Below this fraction of valid (non-null, parseable) samples, the fit would be
+# built from too sparse a sample of the period to be meaningful - leq_rmse
+# stays NULL rather than reporting a number computed from a handful of points.
+LEQ900_MIN_VALID_FRACTION = 0.5
 
 RAW_COLUMN_MAP = {
     "date_time": "datetime",
@@ -20,6 +32,7 @@ RAW_COLUMN_MAP = {
     "Wind": "wind_speed",
     "Dir": "wind_direction",
     "Rain": "rain_mm",
+    "Leq900": "leq900",
 }
 
 READING_COLUMNS = [
@@ -36,6 +49,7 @@ READING_COLUMNS = [
     "wind_speed",
     "wind_direction",
     "rain_mm",
+    "leq900",
 ]
 
 PROCESSED_READING_COLUMNS = [
@@ -96,14 +110,45 @@ def add_tone_columns(df):
     return df
 
 
+def _parse_leq900(raw):
+    # Splits the raw "41.2|A|43.1|..." string into (position, value) pairs,
+    # using each token's index in the *full* split list as its time step (in
+    # seconds) - a dropped "A"/unparsable token still leaves a real gap at its
+    # position, it doesn't shift later tokens' time values down. Returns the
+    # total token count alongside the valid pairs, since the total (not just
+    # the valid count) is what LEQ900_MIN_VALID_FRACTION is measured against.
+    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+        return 0, []
+
+    tokens = str(raw).split(LEQ900_SEPARATOR)
+    points = []
+    for position, token in enumerate(tokens):
+        token = token.strip()
+        if token == "" or token == LEQ900_NULL_TOKEN:
+            continue
+        try:
+            points.append((position, float(token)))
+        except ValueError:
+            continue
+    return len(tokens), points
+
+
 def calculate_leq_rmse(row):
-    # Placeholder - the NW API's per-period 1-second Leq data isn't parsed or
-    # ingested anywhere yet, so there's nothing to compute an RMSE from. Always
-    # returns None until that data exists; the real calculation replaces this
-    # body then. Lives here (not in either detection-logic module) because
-    # it's a property of the raw measurement itself, computed the same way
-    # regardless of which detection logic later filters on it.
-    return None
+    # Real calculation: an ordinary-least-squares straight-line fit between
+    # each valid 1-second Leq value (from the NW API's Leq900 field) and its
+    # time step, then the root-mean-square of that line's residuals. Lives
+    # here (not in either detection-logic module) because it's a property of
+    # the raw measurement itself, computed the same way regardless of which
+    # detection logic later filters on it.
+    total, points = _parse_leq900(row.get("leq900"))
+    if total == 0 or len(points) < 2 or len(points) < total * LEQ900_MIN_VALID_FRACTION:
+        return None
+
+    t = np.array([position for position, _ in points], dtype=float)
+    y = np.array([value for _, value in points], dtype=float)
+    slope, intercept = np.polyfit(t, y, 1)
+    residuals = y - (slope * t + intercept)
+    return round(float(np.sqrt(np.mean(residuals ** 2))), 2)
 
 
 def add_leq_rmse(df):

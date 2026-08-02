@@ -178,16 +178,41 @@ def test_get_conductor_summary_builds_one_box_trace_per_metric():
         ),
     )
 
-    assert len(figure["data"]) == 3  # one box trace per metric
-    l90_trace = figure["data"][0]
-    assert l90_trace["q1"] == [38.0]
-    assert l90_trace["median"] == [41.0]
-    assert l90_trace["q3"] == [44.0]
-    assert l90_trace["lowerfence"] == [35.0]
-    assert l90_trace["upperfence"] == [48.0]
-    assert l90_trace["mean"] == [40.0]
-    assert "Test Site" in l90_trace["x"][0]
-    assert "n=23" in l90_trace["x"][0]
+    assert len(figure["data"]) == 1  # a single chart, not one trace per metric
+    trace = figure["data"][0]
+    assert trace["orientation"] == "h"
+    assert trace["q1"] == [38.0]
+    assert trace["median"] == [41.0]
+    assert trace["q3"] == [44.0]
+    assert trace["lowerfence"] == [35.0]
+    assert trace["upperfence"] == [48.0]
+    assert trace["mean"] == [40.0]
+    assert "Test Site" in trace["y"][0]  # sites on the y-axis, not x
+    assert "n=23" in trace["y"][0]
+
+
+def test_get_conductor_summary_metric_selects_which_stats_are_shown():
+    stats = {
+        "l90": (40.0, 41.0, 38.0, 44.0, 35.0, 48.0),
+        "tone_100hz": (1.0, 1.2, 0.8, 1.5, 0.5, 2.0),
+        "tone_200hz": (0.9, 1.0, 0.7, 1.3, 0.4, 1.8),
+    }
+    summaries = [_summary_row(51, "original", 15, 23, stats)]
+    site_repository = _FakeSiteRepository([SimpleNamespace(noise_site_id=51, site_name="Test Site")])
+
+    l90_figure = trends_service.get_conductor_summary(
+        ConductorSummaryFilters(metric="l90"),
+        repository=_FakeConductorSummaryRepository(summaries),
+        site_repository=site_repository,
+    )
+    tone_100hz_figure = trends_service.get_conductor_summary(
+        ConductorSummaryFilters(metric="tone_100hz"),
+        repository=_FakeConductorSummaryRepository(summaries),
+        site_repository=site_repository,
+    )
+
+    assert l90_figure["data"][0]["median"] == [41.0]
+    assert tone_100hz_figure["data"][0]["median"] == [1.2]
 
 
 def test_get_conductor_summary_filters_by_detection_logic_and_duration():
@@ -211,7 +236,7 @@ def test_get_conductor_summary_filters_by_detection_logic_and_duration():
         ),
     )
 
-    assert "n=9" in figure["data"][0]["x"][0]
+    assert "n=9" in figure["data"][0]["y"][0]
 
 
 def test_get_conductor_summary_returns_empty_figure_with_message_when_no_data():

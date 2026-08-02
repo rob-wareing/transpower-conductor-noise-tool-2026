@@ -2,7 +2,6 @@ import json
 
 import plotly.graph_objects as go
 import plotly.io as pio
-from plotly.subplots import make_subplots
 
 from transpower_conductor_noise_tool_2026.backend.persistence.repositories.conductor_summary_repository import (
     ConductorSummaryRepository,
@@ -76,30 +75,25 @@ def _figure_to_json(figure):
 
 
 def get_conductor_summary(filters, repository=None, site_repository=None):
-    # Builds a box plot straight from conductor_summary's stored five-number
+    # Builds a single horizontal box plot (one metric at a time, chosen via
+    # filters.metric) straight from conductor_summary's stored five-number
     # summary (mean/median/q1/q3/min/max) via Plotly's "precomputed stats"
     # box mode - no raw processed_reading data is refetched here. min/max are
     # used as the whisker fences (lowerfence/upperfence) since the underlying
     # per-reading values aren't retained - a deliberate approximation, not
     # the usual 1.5*IQR fence convention, given only summary stats exist.
-    # One subplot per metric (L90, tone_100hz, tone_200hz) sharing an x-axis
-    # of sites, since the three metrics live on very different scales and
-    # would otherwise squash onto one shared y-axis.
+    # Sites on the y-axis (orientation="h") so long site-name labels stay
+    # readable rather than being crammed onto a shared x-axis.
     repository = repository or ConductorSummaryRepository()
     site_repository = site_repository or SiteRepository()
+    metric = filters.metric
 
     summaries = repository.list_summaries(
         detection_logic=filters.detection_logic,
         measurement_duration_minutes=filters.measurement_duration_minutes,
     )
 
-    figure = make_subplots(
-        rows=len(CONDUCTOR_SUMMARY_METRICS),
-        cols=1,
-        shared_xaxes=True,
-        subplot_titles=[CONDUCTOR_SUMMARY_METRIC_LABELS[metric] for metric in CONDUCTOR_SUMMARY_METRICS],
-        vertical_spacing=0.08,
-    )
+    figure = go.Figure()
 
     if not summaries:
         figure.update_layout(
@@ -108,40 +102,43 @@ def get_conductor_summary(filters, repository=None, site_repository=None):
                 f"{filters.detection_logic!r}, measurement_duration_minutes="
                 f"{filters.measurement_duration_minutes}"
             ),
-            height=900,
+            height=400,
         )
         return _figure_to_json(figure)
 
-    summaries = sorted(summaries, key=lambda s: s.noise_site_id)
+    # Sorted descending so the first site ends up at the top of the y-axis,
+    # matching top-to-bottom reading order (Plotly's categorical y-axis
+    # otherwise plots the first entry at the bottom).
+    summaries = sorted(summaries, key=lambda s: s.noise_site_id, reverse=True)
     sites_by_id = {site.noise_site_id: site for site in site_repository.list_sites()}
-    x = [
+    y = [
         f"({s.noise_site_id}) {sites_by_id[s.noise_site_id].site_name if s.noise_site_id in sites_by_id else s.noise_site_id} (n={s.sample_count})"
         for s in summaries
     ]
 
-    for row, metric in enumerate(CONDUCTOR_SUMMARY_METRICS, start=1):
-        figure.add_trace(
-            go.Box(
-                x=x,
-                q1=[float(getattr(s, f"{metric}_q1")) for s in summaries],
-                median=[float(getattr(s, f"{metric}_median")) for s in summaries],
-                q3=[float(getattr(s, f"{metric}_q3")) for s in summaries],
-                lowerfence=[float(getattr(s, f"{metric}_min")) for s in summaries],
-                upperfence=[float(getattr(s, f"{metric}_max")) for s in summaries],
-                mean=[float(getattr(s, f"{metric}_mean")) for s in summaries],
-                boxmean=True,
-                name=CONDUCTOR_SUMMARY_METRIC_LABELS[metric],
-                showlegend=False,
-            ),
-            row=row,
-            col=1,
+    figure.add_trace(
+        go.Box(
+            y=y,
+            orientation="h",
+            q1=[float(getattr(s, f"{metric}_q1")) for s in summaries],
+            median=[float(getattr(s, f"{metric}_median")) for s in summaries],
+            q3=[float(getattr(s, f"{metric}_q3")) for s in summaries],
+            lowerfence=[float(getattr(s, f"{metric}_min")) for s in summaries],
+            upperfence=[float(getattr(s, f"{metric}_max")) for s in summaries],
+            mean=[float(getattr(s, f"{metric}_mean")) for s in summaries],
+            boxmean=True,
+            name=CONDUCTOR_SUMMARY_METRIC_LABELS[metric],
+            showlegend=False,
         )
+    )
 
     figure.update_layout(
         title=(
-            f"Conductor summary — detection_logic={filters.detection_logic}, "
+            f"Conductor summary — {CONDUCTOR_SUMMARY_METRIC_LABELS[metric]}, "
+            f"detection_logic={filters.detection_logic}, "
             f"measurement_duration_minutes={filters.measurement_duration_minutes}"
         ),
-        height=900,
+        height=max(400, 40 * len(summaries) + 200),
+        xaxis_title=CONDUCTOR_SUMMARY_METRIC_LABELS[metric],
     )
     return _figure_to_json(figure)

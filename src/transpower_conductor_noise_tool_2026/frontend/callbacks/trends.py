@@ -11,17 +11,19 @@ def register_callbacks(dash_app, backend_url: str | None):
     @dash_app.callback(
         Output("trends-conductor-summary-chart", "figure"),
         Input("trends-conductor-summary-init", "n_intervals"),
+        Input("trends-conductor-summary-metric", "value"),
         Input("trends-conductor-summary-detection-logic", "value"),
         Input("trends-conductor-summary-duration", "value"),
     )
     def refresh_conductor_summary_chart(
-        _n_intervals, detection_logic, measurement_duration_minutes
+        _n_intervals, metric, detection_logic, measurement_duration_minutes
     ):
         empty_figure = {"data": [], "layout": {}}
         if client is None:
             return empty_figure
 
         filters = ConductorSummaryFilters(
+            metric=metric or "l90",
             detection_logic=detection_logic or "original",
             measurement_duration_minutes=measurement_duration_minutes or 15,
         )

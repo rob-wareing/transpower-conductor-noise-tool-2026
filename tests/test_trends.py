@@ -47,19 +47,33 @@ def test_conductor_summary_endpoint_returns_a_valid_empty_figure_with_no_data(tm
     assert "No conductor summary data" in chart["layout"]["title"]["text"]
 
 
-def test_conductor_summary_endpoint_returns_box_traces_for_seeded_data(tmp_path, monkeypatch):
+def test_conductor_summary_endpoint_returns_a_single_horizontal_box_trace_for_seeded_data(
+    tmp_path, monkeypatch
+):
     app, client = _make_app_and_client(tmp_path, monkeypatch)
     _seed_summary_row(app)
 
     response = client.post(
         "/api/trends/conductor-summary",
-        json={"detection_logic": "original", "measurement_duration_minutes": 15},
+        json={"metric": "l90", "detection_logic": "original", "measurement_duration_minutes": 15},
     )
 
     assert response.status_code == 200
     chart = response.get_json()["conductor_summary_chart"]
-    assert len(chart["data"]) == 3
+    assert len(chart["data"]) == 1
+    assert chart["data"][0]["orientation"] == "h"
     assert chart["data"][0]["median"] == [41.0]
+
+
+def test_conductor_summary_endpoint_metric_selects_the_right_stats(tmp_path, monkeypatch):
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    _seed_summary_row(app)
+
+    response = client.post("/api/trends/conductor-summary", json={"metric": "tone_100hz"})
+
+    assert response.status_code == 200
+    chart = response.get_json()["conductor_summary_chart"]
+    assert chart["data"][0]["median"] == [1.2]
 
 
 def test_conductor_summary_endpoint_rejects_invalid_detection_logic(tmp_path, monkeypatch):
@@ -76,5 +90,13 @@ def test_conductor_summary_endpoint_rejects_invalid_measurement_duration(tmp_pat
     response = client.post(
         "/api/trends/conductor-summary", json={"measurement_duration_minutes": 5}
     )
+
+    assert response.status_code == 400
+
+
+def test_conductor_summary_endpoint_rejects_invalid_metric(tmp_path, monkeypatch):
+    _app, client = _make_app_and_client(tmp_path, monkeypatch)
+
+    response = client.post("/api/trends/conductor-summary", json={"metric": "leq"})
 
     assert response.status_code == 400

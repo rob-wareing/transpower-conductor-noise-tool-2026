@@ -105,6 +105,7 @@ class ChartFilters(BaseModel):
 class ConductorSummaryFilters(BaseModel):
     detection_logic: str = "original"
     measurement_duration_minutes: int = 15
+    metric: str = "l90"
 
     @field_validator("detection_logic")
     @classmethod
@@ -119,6 +120,13 @@ class ConductorSummaryFilters(BaseModel):
         if value in {1, 15}:
             return value
         raise ValueError("measurement_duration_minutes must be 1 or 15")
+
+    @field_validator("metric")
+    @classmethod
+    def validate_metric(cls, value):
+        if value in {"l90", "tone_100hz", "tone_200hz"}:
+            return value
+        raise ValueError("metric must be 'l90', 'tone_100hz', or 'tone_200hz'")
 
 
 class SiteListResponse(BaseModel):

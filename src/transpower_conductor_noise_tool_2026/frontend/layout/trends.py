@@ -20,6 +20,12 @@ MEASUREMENT_DURATION_OPTIONS = [
     {"label": "15 minutes", "value": 15},
 ]
 
+METRIC_OPTIONS = [
+    {"label": "L90", "value": "l90"},
+    {"label": "100Hz tone", "value": "tone_100hz"},
+    {"label": "200Hz tone", "value": "tone_200hz"},
+]
+
 
 def _placeholder_panel(message):
     return html.Div(
@@ -43,6 +49,18 @@ def _conductor_summary_panel():
             ),
             html.Div(
                 [
+                    html.Div(
+                        [
+                            html.Label("Metric"),
+                            dcc.Dropdown(
+                                id="trends-conductor-summary-metric",
+                                options=METRIC_OPTIONS,
+                                value="l90",
+                                clearable=False,
+                            ),
+                        ],
+                        style={"minWidth": "180px"},
+                    ),
                     html.Div(
                         [
                             html.Label("Detection logic"),

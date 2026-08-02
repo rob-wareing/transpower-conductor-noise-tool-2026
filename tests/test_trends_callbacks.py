@@ -39,6 +39,7 @@ def test_refresh_conductor_summary_chart_passes_selected_filters(fake_client):
         outputs=[("trends-conductor-summary-chart", "figure")],
         inputs=[
             ("trends-conductor-summary-init", "n_intervals", 1),
+            ("trends-conductor-summary-metric", "value", "tone_200hz"),
             ("trends-conductor-summary-detection-logic", "value", "updated_2026"),
             ("trends-conductor-summary-duration", "value", 1),
         ],
@@ -48,6 +49,7 @@ def test_refresh_conductor_summary_chart_passes_selected_filters(fake_client):
     assert figure == {"data": [{"type": "box"}], "layout": {}}
 
     filters = fake_client.get_conductor_summary_chart.call_args[0][0]
+    assert filters.metric == "tone_200hz"
     assert filters.detection_logic == "updated_2026"
     assert filters.measurement_duration_minutes == 1
 
@@ -61,12 +63,14 @@ def test_refresh_conductor_summary_chart_defaults_when_dropdowns_empty(fake_clie
         outputs=[("trends-conductor-summary-chart", "figure")],
         inputs=[
             ("trends-conductor-summary-init", "n_intervals", 1),
+            ("trends-conductor-summary-metric", "value", None),
             ("trends-conductor-summary-detection-logic", "value", None),
             ("trends-conductor-summary-duration", "value", None),
         ],
     )
 
     filters = fake_client.get_conductor_summary_chart.call_args[0][0]
+    assert filters.metric == "l90"
     assert filters.detection_logic == "original"
     assert filters.measurement_duration_minutes == 15
 
@@ -79,6 +83,7 @@ def test_refresh_conductor_summary_chart_handles_no_backend():
         outputs=[("trends-conductor-summary-chart", "figure")],
         inputs=[
             ("trends-conductor-summary-init", "n_intervals", 1),
+            ("trends-conductor-summary-metric", "value", "l90"),
             ("trends-conductor-summary-detection-logic", "value", "original"),
             ("trends-conductor-summary-duration", "value", 15),
         ],

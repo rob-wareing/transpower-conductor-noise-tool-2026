@@ -1,3 +1,4 @@
+from .conductor_summary import ConductorSummary
 from .historical_result import HistoricalResult
 from .outage import Outage
 from .outage_type import OutageType

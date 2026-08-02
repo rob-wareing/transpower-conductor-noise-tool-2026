@@ -19,6 +19,7 @@ class ProcessedReadingRepository:
         is_wet=None,
         measurement_duration_minutes=None,
         detection_logic=None,
+        include=None,
     ):
         query = ProcessedReading.query
 
@@ -36,6 +37,8 @@ class ProcessedReadingRepository:
             )
         if detection_logic is not None:
             query = query.filter(ProcessedReading.detection_logic == detection_logic)
+        if include is not None:
+            query = query.filter(ProcessedReading.include == include)
 
         return query.order_by(
             ProcessedReading.noise_site_id.asc(), ProcessedReading.datetime.asc()

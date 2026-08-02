@@ -103,6 +103,7 @@ class ChartFilters(BaseModel):
 
 
 class ConductorSummaryFilters(BaseModel):
+    noise_site_id: List[int] = []
     detection_logic: str = "original"
     measurement_duration_minutes: int = 15
     metric: str = "l90"
@@ -120,6 +121,27 @@ class ConductorSummaryFilters(BaseModel):
         if value in {1, 15}:
             return value
         raise ValueError("measurement_duration_minutes must be 1 or 15")
+
+    @field_validator("metric")
+    @classmethod
+    def validate_metric(cls, value):
+        if value in {"l90", "tone_100hz", "tone_200hz"}:
+            return value
+        raise ValueError("metric must be 'l90', 'tone_100hz', or 'tone_200hz'")
+
+
+class RainRateVsLevelFilters(BaseModel):
+    noise_site_id: List[int] = []
+    detection_logic: str = "original"
+    metric: str = "l90"
+    include_dry: bool = False
+
+    @field_validator("detection_logic")
+    @classmethod
+    def validate_detection_logic(cls, value):
+        if value in {"original", "updated_2026"}:
+            return value
+        raise ValueError("detection_logic must be 'original' or 'updated_2026'")
 
     @field_validator("metric")
     @classmethod

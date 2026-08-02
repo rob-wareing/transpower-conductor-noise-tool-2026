@@ -66,28 +66,26 @@ def content(write_access: bool = False):
             dcc.Interval(id="chart-init", interval=1000, n_intervals=0, max_intervals=1),
             html.Div(
                 [
-                    # Row 1: Sites
+                    # Row 1: Sites, Date range
                     html.Div(
-                        html.Div(
-                            [
-                                html.Label("Sites"),
-                                dcc.Dropdown(id="chart-site-select", multi=True),
-                            ],
-                            style={"minWidth": "500px", "maxWidth": "900px"},
-                        ),
-                        style={"display": "flex", "marginBottom": "1rem"},
+                        [
+                            html.Div(
+                                [
+                                    html.Label("Sites"),
+                                    dcc.Dropdown(id="chart-site-select", multi=True),
+                                ],
+                                style={"minWidth": "500px", "maxWidth": "900px"},
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Date range"),
+                                    dcc.DatePickerRange(id="chart-date-range"),
+                                ]
+                            ),
+                        ],
+                        style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
                     ),
-                    # Row 2: Date range
-                    html.Div(
-                        html.Div(
-                            [
-                                html.Label("Date range"),
-                                dcc.DatePickerRange(id="chart-date-range"),
-                            ]
-                        ),
-                        style={"display": "flex", "marginBottom": "1rem"},
-                    ),
-                    # Row 3: Condition, Parameter, Aggregation period
+                    # Row 2: Condition, Parameter, Aggregation period
                     html.Div(
                         [
                             html.Div(
@@ -139,7 +137,7 @@ def content(write_access: bool = False):
                         ],
                         style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
                     ),
-                    # Row 4: Conductor and treatment (+ detection logic below it), Grease
+                    # Row 3: Conductor and treatment, Grease
                     html.Div(
                         [
                             html.Div(
@@ -151,11 +149,6 @@ def content(write_access: bool = False):
                                         value=[],
                                         multi=True,
                                         placeholder="All",
-                                    ),
-                                    html.Label("Detection logic", style={"marginTop": "0.5rem"}),
-                                    dcc.Dropdown(
-                                        id="chart-detection-logic",
-                                        options=DETECTION_LOGIC_OPTIONS,
                                     ),
                                 ],
                                 style={"minWidth": "400px", "maxWidth": "700px"},
@@ -176,20 +169,32 @@ def content(write_access: bool = False):
                         ],
                         style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
                     ),
-                    # Row 5: Plot by
+                    # Row 4: Detection logic, Plot by
                     html.Div(
-                        html.Div(
-                            [
-                                html.Label("Plot by"),
-                                dcc.RadioItems(
-                                    id="chart-plot-by",
-                                    options=PLOT_BY_OPTIONS,
-                                    value="datetime",
-                                ),
-                            ],
-                            style={"minWidth": "220px"},
-                        ),
-                        style={"display": "flex", "marginBottom": "1rem"},
+                        [
+                            html.Div(
+                                [
+                                    html.Label("Detection logic"),
+                                    dcc.Dropdown(
+                                        id="chart-detection-logic",
+                                        options=DETECTION_LOGIC_OPTIONS,
+                                    ),
+                                ],
+                                style={"minWidth": "220px"},
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Plot by"),
+                                    dcc.RadioItems(
+                                        id="chart-plot-by",
+                                        options=PLOT_BY_OPTIONS,
+                                        value="datetime",
+                                    ),
+                                ],
+                                style={"minWidth": "220px"},
+                            ),
+                        ],
+                        style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
                     ),
                 ],
                 style={"marginBottom": "1rem"},

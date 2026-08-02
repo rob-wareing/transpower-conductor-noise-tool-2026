@@ -7,8 +7,10 @@ from transpower_conductor_noise_tool_2026.backend.persistence.models.conductor_s
 
 
 class ConductorSummaryRepository:
-    def list_summaries(self, detection_logic=None, measurement_duration_minutes=None):
+    def list_summaries(self, noise_site_id=None, detection_logic=None, measurement_duration_minutes=None):
         query = ConductorSummary.query
+        if noise_site_id:
+            query = query.filter(ConductorSummary.noise_site_id.in_(noise_site_id))
         if detection_logic is not None:
             query = query.filter(ConductorSummary.detection_logic == detection_logic)
         if measurement_duration_minutes is not None:

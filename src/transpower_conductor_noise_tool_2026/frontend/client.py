@@ -13,6 +13,7 @@ from transpower_conductor_noise_tool_2026.shared.contracts import (
     OutageDetail,
     OutageUpdate,
     ProcessedReadingUpdate,
+    RainRateVsLevelFilters,
     ReconductoringCreate,
     ReconductoringDetail,
     ReconductoringUpdate,
@@ -79,6 +80,15 @@ class BackendClient:
         )
         response.raise_for_status()
         return response.json()["conductor_summary_chart"]
+
+    def get_rain_rate_vs_level_chart(self, filters: RainRateVsLevelFilters):
+        response = requests.post(
+            f"{self.base_url}/api/trends/rain-rate-vs-level",
+            json=filters.model_dump(mode="json"),
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()["rain_rate_vs_level_chart"]
 
     def get_chart_table_rows(self, filters: ChartFilters):
         response = requests.post(

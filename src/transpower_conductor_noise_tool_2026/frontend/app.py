@@ -24,7 +24,7 @@ from .layout import trends as trends_layout
 LOGIN_FORM = """
 <!doctype html>
 <title>Log in</title>
-<h1>Conductor Noise Tool 2026</h1>
+<h1>Conductor Noise Tool</h1>
 {error}
 <form method="post" action="/login">
   <label>Email <input type="email" name="email" required></label><br>
@@ -77,7 +77,7 @@ def create_dashboard(server=None, backend_url=None):
         _register_auth_routes(server, client)
 
     dash_app = dash.Dash(
-        title="Conductor Noise Tool 2026",
+        title="Conductor Noise Tool",
         server=server,
         routes_pathname_prefix="/app/",
         external_stylesheets=[
@@ -137,12 +137,21 @@ def create_dashboard(server=None, backend_url=None):
             [
                 html.Div(
                     [
-                        html.H1("Conductor Noise Tool 2026", className="display-4"),
-                        html.A("Log out", href="/logout", className="logout-button"),
+                        html.H1("Conductor Noise Tool", className="display-6"),
+                        html.Div(
+                            [
+                                html.Div(current_user.name),
+                                html.A("Log out", href="/logout", className="logout-button"),
+                            ],
+                            style={"textAlign": "right"},
+                        ),
                     ],
-                    style={"display": "flex", "alignItems": "baseline"},
+                    style={
+                        "display": "flex",
+                        "justifyContent": "space-between",
+                        "alignItems": "flex-end",
+                    },
                 ),
-                html.P(f"Signed in as {current_user.name}."),
                 html.Hr(),
                 html.Div(tabs, id="tab-content", className="p-4"),
             ],

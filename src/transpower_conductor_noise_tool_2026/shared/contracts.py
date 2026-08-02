@@ -102,6 +102,25 @@ class ChartFilters(BaseModel):
         raise ValueError("plot_by must be 'datetime' or 'days_since_conductoring'")
 
 
+class ConductorSummaryFilters(BaseModel):
+    detection_logic: str = "original"
+    measurement_duration_minutes: int = 15
+
+    @field_validator("detection_logic")
+    @classmethod
+    def validate_detection_logic(cls, value):
+        if value in {"original", "updated_2026"}:
+            return value
+        raise ValueError("detection_logic must be 'original' or 'updated_2026'")
+
+    @field_validator("measurement_duration_minutes")
+    @classmethod
+    def validate_measurement_duration_minutes(cls, value):
+        if value in {1, 15}:
+            return value
+        raise ValueError("measurement_duration_minutes must be 1 or 15")
+
+
 class SiteListResponse(BaseModel):
     items: List[SiteSummary]
 

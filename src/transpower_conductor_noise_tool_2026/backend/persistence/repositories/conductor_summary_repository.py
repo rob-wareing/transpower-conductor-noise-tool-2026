@@ -7,10 +7,15 @@ from transpower_conductor_noise_tool_2026.backend.persistence.models.conductor_s
 
 
 class ConductorSummaryRepository:
-    def list_summaries(self):
-        return ConductorSummary.query.order_by(
-            ConductorSummary.noise_site_id.asc(), ConductorSummary.detection_logic.asc()
-        ).all()
+    def list_summaries(self, detection_logic=None, measurement_duration_minutes=None):
+        query = ConductorSummary.query
+        if detection_logic is not None:
+            query = query.filter(ConductorSummary.detection_logic == detection_logic)
+        if measurement_duration_minutes is not None:
+            query = query.filter(
+                ConductorSummary.measurement_duration_minutes == measurement_duration_minutes
+            )
+        return query.order_by(ConductorSummary.noise_site_id.asc()).all()
 
     def replace_all(self, records):
         # The whole table is always fully regenerated, not incrementally

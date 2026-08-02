@@ -5,6 +5,7 @@ import requests
 from transpower_conductor_noise_tool_2026.shared.contracts import (
     ChartFilters,
     ChartTableRow,
+    ConductorSummaryFilters,
     HistoricalResultCreate,
     HistoricalResultDetail,
     HistoricalResultUpdate,
@@ -69,6 +70,15 @@ class BackendClient:
         )
         response.raise_for_status()
         return response.json()
+
+    def get_conductor_summary_chart(self, filters: ConductorSummaryFilters):
+        response = requests.post(
+            f"{self.base_url}/api/trends/conductor-summary",
+            json=filters.model_dump(mode="json"),
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()["conductor_summary_chart"]
 
     def get_chart_table_rows(self, filters: ChartFilters):
         response = requests.post(

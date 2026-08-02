@@ -22,6 +22,7 @@ from .api.outage_routes import bp as outage_bp
 from .api.processed_reading_routes import bp as processed_reading_bp
 from .api.reconductoring_routes import bp as reconductoring_bp
 from .api.routes import bp as api_bp
+from .api.trends_routes import bp as trends_bp
 
 
 def create_app(test_config=None):
@@ -45,6 +46,7 @@ def create_app(test_config=None):
     app.register_blueprint(reconductoring_bp)
     app.register_blueprint(historical_bp)
     app.register_blueprint(processed_reading_bp)
+    app.register_blueprint(trends_bp)
 
     with app.app_context():
         if app.config.get("AUTO_INIT_DB", False):

@@ -8,6 +8,9 @@ from transpower_conductor_noise_tool_2026.backend.persistence.models.conductor_s
 from transpower_conductor_noise_tool_2026.backend.persistence.models.processed_reading import (
     ProcessedReading,
 )
+from transpower_conductor_noise_tool_2026.backend.persistence.models.rain_rate_fit import (
+    RainRateFit,
+)
 from transpower_conductor_noise_tool_2026.backend.persistence.models.reconductoring import (
     Reconductoring,
 )
@@ -279,6 +282,48 @@ def test_rain_rate_vs_level_endpoint_excludes_dry_readings_by_default(tmp_path, 
     )
     include_dry_chart = include_dry_response.get_json()["rain_rate_vs_level_chart"]
     assert include_dry_chart["data"][0]["x"] == [0.0, 3.0]  # both
+
+
+def _seed_rain_rate_fit(app, **overrides):
+    defaults = dict(
+        noise_site_id=KNOWN_SITE,
+        detection_logic="updated_2026",
+        metric="l90",
+        slope=4.0,
+        intercept=40.0,
+        r_squared=0.8,
+        sample_count=10,
+        computed_at=datetime(2026, 8, 3, 0, 0, 0),
+    )
+    defaults.update(overrides)
+    with app.app_context():
+        db.session.add(RainRateFit(**defaults))
+        db.session.commit()
+
+
+def test_rain_rate_vs_level_endpoint_includes_a_fit_line_when_one_is_stored(tmp_path, monkeypatch):
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    # detection_logic="updated_2026" keeps this scoped away from the demo
+    # seed's baseline rows, same trick as the other isolated tests above.
+    _seed_processed_reading(
+        app, detection_logic="updated_2026", rain1=1.0, l90=40.0,
+        datetime=datetime(2026, 8, 3, 23, 0, 0),
+    )
+    _seed_processed_reading(
+        app, detection_logic="updated_2026", rain1=2.0, l90=44.0,
+        datetime=datetime(2026, 8, 3, 23, 15, 0),
+    )
+    _seed_rain_rate_fit(app)
+
+    response = client.post(
+        "/api/trends/rain-rate-vs-level",
+        json={"detection_logic": "updated_2026", "metric": "l90"},
+    )
+
+    assert response.status_code == 200
+    chart = response.get_json()["rain_rate_vs_level_chart"]
+    assert len(chart["data"]) == 2
+    assert chart["data"][1]["mode"] == "lines"
 
 
 def test_rain_rate_vs_level_endpoint_rejects_invalid_detection_logic(tmp_path, monkeypatch):

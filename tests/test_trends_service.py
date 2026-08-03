@@ -2,6 +2,7 @@ from datetime import date
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 from transpower_conductor_noise_tool_2026.backend.domain import trends_service
 from transpower_conductor_noise_tool_2026.shared.contracts import (
@@ -40,6 +41,30 @@ class _FakeProcessedReadingRepository:
         ]
 
 
+def _fit(noise_site_id, detection_logic, metric, slope, intercept):
+    return SimpleNamespace(
+        noise_site_id=noise_site_id,
+        detection_logic=detection_logic,
+        metric=metric,
+        slope=slope,
+        intercept=intercept,
+    )
+
+
+class _FakeRainRateFitRepository:
+    def __init__(self, fits=()):
+        self._fits = list(fits)
+
+    def list_fits(self, noise_site_id=None, detection_logic=None, metric=None):
+        return [
+            f
+            for f in self._fits
+            if (not noise_site_id or f.noise_site_id in noise_site_id)
+            and (detection_logic is None or f.detection_logic == detection_logic)
+            and (metric is None or f.metric == metric)
+        ]
+
+
 def test_get_rain_rate_vs_level_builds_one_trace_per_site():
     readings = [
         _reading(51, "original", rain1=0.0, l90=40.0, tone_100hz=1.0, tone_200hz=0.5),
@@ -57,6 +82,7 @@ def test_get_rain_rate_vs_level_builds_one_trace_per_site():
                 SimpleNamespace(noise_site_id=137, site_name="Site B"),
             ]
         ),
+        fit_repository=_FakeRainRateFitRepository(),
     )
 
     assert len(figure["data"]) == 2  # one trace per site
@@ -80,11 +106,13 @@ def test_get_rain_rate_vs_level_metric_selects_which_values_are_plotted():
         RainRateVsLevelFilters(metric="l90"),
         repository=_FakeProcessedReadingRepository(readings),
         site_repository=site_repository,
+        fit_repository=_FakeRainRateFitRepository(),
     )
     tone_figure = trends_service.get_rain_rate_vs_level(
         RainRateVsLevelFilters(metric="tone_100hz"),
         repository=_FakeProcessedReadingRepository(readings),
         site_repository=site_repository,
+        fit_repository=_FakeRainRateFitRepository(),
     )
 
     assert l90_figure["data"][0]["y"] == [40.0]
@@ -103,6 +131,7 @@ def test_get_rain_rate_vs_level_filters_by_site_and_detection_logic():
         filters,
         repository=_FakeProcessedReadingRepository(readings),
         site_repository=_FakeSiteRepository([SimpleNamespace(noise_site_id=51, site_name="Site A")]),
+        fit_repository=_FakeRainRateFitRepository(),
     )
 
     assert len(figure["data"]) == 1
@@ -120,6 +149,7 @@ def test_get_rain_rate_vs_level_excludes_dry_readings_by_default():
         RainRateVsLevelFilters(),  # include_dry defaults to False
         repository=_FakeProcessedReadingRepository(readings),
         site_repository=site_repository,
+        fit_repository=_FakeRainRateFitRepository(),
     )
     assert default_figure["data"][0]["x"] == [2.0]  # only the wet reading
 
@@ -127,6 +157,7 @@ def test_get_rain_rate_vs_level_excludes_dry_readings_by_default():
         RainRateVsLevelFilters(include_dry=True),
         repository=_FakeProcessedReadingRepository(readings),
         site_repository=site_repository,
+        fit_repository=_FakeRainRateFitRepository(),
     )
     assert include_dry_figure["data"][0]["x"] == [0.0, 2.0]  # both
 
@@ -138,10 +169,146 @@ def test_get_rain_rate_vs_level_returns_empty_figure_with_message_when_no_data()
         filters,
         repository=_FakeProcessedReadingRepository([]),
         site_repository=_FakeSiteRepository([]),
+        fit_repository=_FakeRainRateFitRepository(),
     )
 
     assert figure["data"] == []
     assert "No processed reading data" in figure["layout"]["title"]["text"]
+
+
+def test_get_rain_rate_vs_level_adds_a_dashed_fit_line_matching_marker_color():
+    readings = [
+        _reading(51, "original", rain1=1.0, l90=40.0, tone_100hz=1.0, tone_200hz=0.5),
+        _reading(51, "original", rain1=2.0, l90=44.0, tone_100hz=1.0, tone_200hz=0.5),
+    ]
+    fits = [_fit(51, "original", "l90", slope=4.0, intercept=40.0)]
+    filters = RainRateVsLevelFilters(detection_logic="original", metric="l90")
+
+    figure = trends_service.get_rain_rate_vs_level(
+        filters,
+        repository=_FakeProcessedReadingRepository(readings),
+        site_repository=_FakeSiteRepository([SimpleNamespace(noise_site_id=51, site_name="Site A")]),
+        fit_repository=_FakeRainRateFitRepository(fits),
+    )
+
+    assert len(figure["data"]) == 2
+    marker_trace, line_trace = figure["data"]
+    assert marker_trace["mode"] == "markers"
+    assert line_trace["mode"] == "lines"
+    assert line_trace["showlegend"] is False
+    assert line_trace["line"]["dash"] == "dash"
+    assert line_trace["line"]["color"] == marker_trace["marker"]["color"]
+    assert line_trace["legendgroup"] == marker_trace["legendgroup"]
+
+
+def test_get_rain_rate_vs_level_omits_fit_line_when_no_fit_stored():
+    readings = [_reading(51, "original", rain1=1.0, l90=40.0, tone_100hz=1.0, tone_200hz=0.5)]
+    filters = RainRateVsLevelFilters(detection_logic="original", metric="l90")
+
+    figure = trends_service.get_rain_rate_vs_level(
+        filters,
+        repository=_FakeProcessedReadingRepository(readings),
+        site_repository=_FakeSiteRepository([SimpleNamespace(noise_site_id=51, site_name="Site A")]),
+        fit_repository=_FakeRainRateFitRepository(),
+    )
+
+    assert len(figure["data"]) == 1  # marker trace only, no fit line
+
+
+def test_get_rain_rate_vs_level_looks_up_fit_by_selected_metric():
+    readings = [_reading(51, "original", rain1=1.0, l90=40.0, tone_100hz=1.0, tone_200hz=0.5)]
+    fits = [_fit(51, "original", "tone_100hz", slope=1.0, intercept=1.0)]
+    filters = RainRateVsLevelFilters(detection_logic="original", metric="l90")
+
+    figure = trends_service.get_rain_rate_vs_level(
+        filters,
+        repository=_FakeProcessedReadingRepository(readings),
+        site_repository=_FakeSiteRepository([SimpleNamespace(noise_site_id=51, site_name="Site A")]),
+        fit_repository=_FakeRainRateFitRepository(fits),
+    )
+
+    # A fit exists, but only for tone_100hz - the l90-selected chart shouldn't
+    # pick it up.
+    assert len(figure["data"]) == 1
+
+
+def test_compute_rain_rate_fits_recovers_a_known_logarithmic_relationship():
+    import numpy as np
+
+    rain1 = np.array([1.0, 2.0, 4.0, 8.0, 16.0])
+    true_slope, true_intercept = 5.0, 30.0
+    l90 = true_slope * np.log(rain1) + true_intercept
+    df = pd.DataFrame(
+        {
+            "noise_site_id": [51] * 5,
+            "detection_logic": ["original"] * 5,
+            "rain1": rain1,
+            "l90": l90,
+            "tone_100hz": l90,
+            "tone_200hz": l90,
+        }
+    )
+
+    records = trends_service.compute_rain_rate_fits(df)
+    l90_record = next(r for r in records if r["metric"] == "l90")
+
+    assert l90_record["noise_site_id"] == 51
+    assert l90_record["detection_logic"] == "original"
+    assert l90_record["sample_count"] == 5
+    assert l90_record["slope"] == pytest.approx(true_slope, abs=1e-6)
+    assert l90_record["intercept"] == pytest.approx(true_intercept, abs=1e-6)
+    assert l90_record["r_squared"] == pytest.approx(1.0, abs=1e-6)
+
+
+def test_compute_rain_rate_fits_skips_groups_with_fewer_than_three_points():
+    df = pd.DataFrame(
+        {
+            "noise_site_id": [51, 51],
+            "detection_logic": ["original", "original"],
+            "rain1": [1.0, 2.0],
+            "l90": [40.0, 44.0],
+            "tone_100hz": [1.0, 1.0],
+            "tone_200hz": [0.5, 0.5],
+        }
+    )
+
+    assert trends_service.compute_rain_rate_fits(df) == []
+
+
+def test_compute_rain_rate_fits_excludes_zero_and_negative_rain1():
+    df = pd.DataFrame(
+        {
+            "noise_site_id": [51, 51, 51, 51],
+            "detection_logic": ["original"] * 4,
+            "rain1": [0.0, 1.0, 2.0, 4.0],
+            "l90": [40.0, 40.0, 44.0, 48.0],
+            "tone_100hz": [1.0, 1.0, 1.0, 1.0],
+            "tone_200hz": [0.5, 0.5, 0.5, 0.5],
+        }
+    )
+
+    records = trends_service.compute_rain_rate_fits(df)
+    l90_record = next(r for r in records if r["metric"] == "l90")
+
+    assert l90_record["sample_count"] == 3  # the rain1=0.0 row excluded
+
+
+def test_compute_rain_rate_fits_separates_detection_logic_groups():
+    df = pd.DataFrame(
+        {
+            "noise_site_id": [51, 51, 51, 51, 51, 51],
+            "detection_logic": ["original"] * 3 + ["updated_2026"] * 3,
+            "rain1": [1.0, 2.0, 4.0] * 2,
+            "l90": [40.0, 44.0, 48.0, 100.0, 110.0, 120.0],
+            "tone_100hz": [1.0] * 6,
+            "tone_200hz": [0.5] * 6,
+        }
+    )
+
+    records = trends_service.compute_rain_rate_fits(df)
+    l90_records = [r for r in records if r["metric"] == "l90"]
+
+    assert {r["detection_logic"] for r in l90_records} == {"original", "updated_2026"}
 
 
 def _rows(

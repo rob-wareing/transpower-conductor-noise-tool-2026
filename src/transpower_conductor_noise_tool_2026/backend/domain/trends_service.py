@@ -1,6 +1,8 @@
 import json
 
+import numpy as np
 import pandas as pd
+import plotly.colors
 import plotly.graph_objects as go
 import plotly.io as pio
 
@@ -10,12 +12,20 @@ from transpower_conductor_noise_tool_2026.backend.persistence.repositories.condu
 from transpower_conductor_noise_tool_2026.backend.persistence.repositories.processed_reading_repository import (
     ProcessedReadingRepository,
 )
+from transpower_conductor_noise_tool_2026.backend.persistence.repositories.rain_rate_fit_repository import (
+    RainRateFitRepository,
+)
 from transpower_conductor_noise_tool_2026.backend.persistence.repositories.reconductoring_repository import (
     ReconductoringRepository,
 )
 from transpower_conductor_noise_tool_2026.backend.persistence.repositories.site_repository import (
     SiteRepository,
 )
+
+# Fixed palette so a site's marker trace and its fit-line trace always get
+# the same colour (Plotly's default per-trace colour cycling would otherwise
+# desync once fit-line traces are interleaved with marker traces).
+SITE_COLOR_PALETTE = plotly.colors.qualitative.Plotly
 
 # Rain rate vs level and Conductor summary both operate over the same three
 # acoustic metrics; Age effects' backing table doesn't exist yet, so it stays
@@ -35,19 +45,26 @@ def _figure_to_json(figure):
     return json.loads(pio.to_json(figure))
 
 
-def get_rain_rate_vs_level(filters, repository=None, site_repository=None):
+def get_rain_rate_vs_level(filters, repository=None, site_repository=None, fit_repository=None):
     # Scatter of the selected metric (y) against rain1, the current period's
     # rainfall (x) - one point per raw processed_reading row, one coloured
-    # trace per site (Plotly's default per-trace colour cycling, same as
-    # chart_service.py's own noise chart - no explicit colours are set).
+    # trace per site, explicitly coloured via SITE_COLOR_PALETTE (not
+    # Plotly's default per-trace cycling) so each site's marker trace and its
+    # fit-line trace below share the same colour.
     # Only include=1 rows count, matching the main Charts tab's own
     # convention (chart_service.py filters to include==True before
     # charting). measurement_duration_minutes is deliberately NOT filtered
     # here, unlike conductor_summary - every duration is shown. is_wet *is*
     # filtered, controlled by filters.include_dry (default False -> is_wet=1
     # only, dry/is_wet=0 points removed; True -> both wet and dry included).
+    #
+    # Each site with a stored rain_rate_fit row (see compute_rain_rate_fits
+    # and scripts/generate_rain_rate_fits.py) also gets a dashed
+    # logarithmic best-fit line, precomputed rather than refit on every
+    # request - the fit is looked up, never recomputed, here.
     repository = repository or ProcessedReadingRepository()
     site_repository = site_repository or SiteRepository()
+    fit_repository = fit_repository or RainRateFitRepository()
     metric = filters.metric
 
     readings = repository.list_readings(
@@ -83,13 +100,49 @@ def get_rain_rate_vs_level(filters, repository=None, site_repository=None):
         ]
     )
 
-    for noise_site_id, group in df.sort_values("noise_site_id").groupby("noise_site_id"):
+    fits_by_site = {
+        fit.noise_site_id: fit
+        for fit in fit_repository.list_fits(
+            noise_site_id=filters.noise_site_id,
+            detection_logic=filters.detection_logic,
+            metric=metric,
+        )
+    }
+
+    for index, (noise_site_id, group) in enumerate(
+        df.sort_values("noise_site_id").groupby("noise_site_id")
+    ):
+        color = SITE_COLOR_PALETTE[index % len(SITE_COLOR_PALETTE)]
+        site_name = group["site_name"].iloc[0]
+        legend_group = f"site-{noise_site_id}"
         figure.add_trace(
             go.Scatter(
                 x=group["rain1"].tolist(),
                 y=group["value"].tolist(),
                 mode="markers",
-                name=f"({noise_site_id}) {group['site_name'].iloc[0]}",
+                name=f"({noise_site_id}) {site_name}",
+                marker=dict(color=color),
+                legendgroup=legend_group,
+            )
+        )
+
+        fit = fits_by_site.get(noise_site_id)
+        if fit is None:
+            continue
+        wet_rain1 = group.loc[group["rain1"] > 0, "rain1"]
+        if wet_rain1.empty:
+            continue
+        x_fit = np.linspace(wet_rain1.min(), wet_rain1.max(), 30)
+        y_fit = float(fit.slope) * np.log(x_fit) + float(fit.intercept)
+        figure.add_trace(
+            go.Scatter(
+                x=x_fit.tolist(),
+                y=y_fit.tolist(),
+                mode="lines",
+                name=f"({noise_site_id}) {site_name} — fit",
+                line=dict(color=color, dash="dash"),
+                legendgroup=legend_group,
+                showlegend=False,
             )
         )
 
@@ -103,6 +156,44 @@ def get_rain_rate_vs_level(filters, repository=None, site_repository=None):
         height=600,
     )
     return _figure_to_json(figure)
+
+
+def compute_rain_rate_fits(df):
+    # df: one row per already-filtered processed_reading (include=1, is_wet=1),
+    # columns noise_site_id, detection_logic, rain1, l90, tone_100hz,
+    # tone_200hz. For each metric independently, groups by (noise_site_id,
+    # detection_logic), fits metric = slope*ln(rain1) + intercept via
+    # np.polyfit over rows with rain1 > 0 (log undefined at 0). A group with
+    # fewer than 3 qualifying points is skipped entirely - not enough data
+    # for a meaningful fit - matching conductor_summary's skip-rather-than-
+    # NULL convention (see CLAUDE.md).
+    wet = df[df["rain1"] > 0]
+    records = []
+    for metric in METRICS:
+        for (noise_site_id, detection_logic), group in wet.groupby(
+            ["noise_site_id", "detection_logic"]
+        ):
+            if len(group) < 3:
+                continue
+            log_rain1 = np.log(group["rain1"].to_numpy())
+            values = group[metric].to_numpy()
+            slope, intercept = np.polyfit(log_rain1, values, 1)
+            predicted = slope * log_rain1 + intercept
+            ss_res = float(np.sum((values - predicted) ** 2))
+            ss_tot = float(np.sum((values - values.mean()) ** 2))
+            r_squared = 1 - ss_res / ss_tot if ss_tot > 0 else None
+            records.append(
+                {
+                    "noise_site_id": int(noise_site_id),
+                    "detection_logic": detection_logic,
+                    "metric": metric,
+                    "slope": round(float(slope), 4),
+                    "intercept": round(float(intercept), 4),
+                    "r_squared": round(r_squared, 4) if r_squared is not None else None,
+                    "sample_count": int(len(group)),
+                }
+            )
+    return records
 
 
 def get_age_effects():

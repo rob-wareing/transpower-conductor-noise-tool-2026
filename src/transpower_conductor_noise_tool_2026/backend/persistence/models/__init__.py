@@ -3,6 +3,7 @@ from .historical_result import HistoricalResult
 from .outage import Outage
 from .outage_type import OutageType
 from .processed_reading import ProcessedReading
+from .rain_rate_fit import RainRateFit
 from .reading import Reading
 from .reconductoring import Reconductoring
 from .site import Site

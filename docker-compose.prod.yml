@@ -1,0 +1,69 @@
+# Production deployment (Digital Ocean Droplet - see DEPLOY.md).
+#
+# Points at an existing, externally-managed MySQL database via DATABASE_URL
+# in .env (not a local `db` container - there isn't one in this file). TLS
+# termination is handled by nginx + certbot on the host, not by a dockerized
+# nginx service, so this file has no `nginx` service either.
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.prod.yml run --rm db-migrate
+#   docker compose -f docker-compose.prod.yml up -d web
+#   docker compose -f docker-compose.prod.yml --profile ingestion run --rm ingest
+#   docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_conductor_summary.py
+#   docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_rain_rate_fits.py
+
+services:
+  db-migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.migrate
+    container_name: conductor_noise_2026_migrate
+    command: >
+      sh -c "alembic upgrade head && python -m transpower_conductor_noise_tool_2026.backend.persistence.seed_cli"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - AUTO_INIT_DB=false
+      - AUTO_SEED_DATA=false
+    volumes:
+      - ./data:/app/data
+      - ./ca-certificate.crt:/app/ca-certificate.crt:ro
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: conductor_noise_2026_web
+    restart: unless-stopped
+    ports:
+      - "5001:5000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - SESSION_COOKIE_SECURE=true
+      - AUTO_INIT_DB=false
+      - AUTO_SEED_DATA=false
+    volumes:
+      - ./data:/app/data
+      - ./ca-certificate.crt:/app/ca-certificate.crt:ro
+
+  # Opt-in only - run via:
+  #   docker compose -f docker-compose.prod.yml --profile ingestion run --rm ingest
+  ingest:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.migrate
+    container_name: conductor_noise_2026_ingest
+    command: python -m transpower_conductor_noise_tool_2026.backend.ingestion.ingest_cli
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - NW_USERNAME=${NW_USERNAME:-}
+      - NW_PASSWORD=${NW_PASSWORD:-}
+      - NW_BASE_URL=${NW_BASE_URL:-}
+      - INGEST_SITE_IDS=${INGEST_SITE_IDS:-}
+      - AUTO_INIT_DB=false
+      - AUTO_SEED_DATA=false
+    volumes:
+      - ./ca-certificate.crt:/app/ca-certificate.crt:ro
+    profiles:
+      - ingestion

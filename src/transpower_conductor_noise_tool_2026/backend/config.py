@@ -51,6 +51,7 @@ class Settings:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-me")
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", False)
     NW_BASE_URL = os.environ.get("NW_BASE_URL", "https://api.noiseandweather.com/v1")
     NW_USERNAME = os.environ.get("NW_USERNAME")
     NW_PASSWORD = os.environ.get("NW_PASSWORD")

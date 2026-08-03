@@ -37,7 +37,7 @@ src/transpower_conductor_noise_tool_2026/
       seed.py       # CSV-based demo data seeding
       seed_cli.py   # entrypoint used by db-migrate container
     app.py          # Flask app factory
-    config.py       # Settings incl. AUTO_INIT_DB / AUTO_SEED_DATA / SECRET_KEY / *_FIXTURE_PATH / NW_* flags
+    config.py       # Settings incl. AUTO_INIT_DB / AUTO_SEED_DATA / SECRET_KEY / SESSION_COOKIE_SECURE / *_FIXTURE_PATH / NW_* flags
     extensions.py   # db = SQLAlchemy(); also enables SQLite FK enforcement (off by default in SQLite, on in the real MySQL deployment)
   frontend/
     app.py          # Dash app factory (create_dashboard) + plain /login, /logout routes + dcc.Location auth gate + dbc.Tabs(Charts, Sites, Outages, Reconductoring, Historical, Trends, Locations) - all 7 old-app tabs; explicit assets_folder= (Dash's default inference would otherwise resolve to backend/assets, not frontend/assets); header is title (H1.display-6, "Conductor Noise Tool") + right-aligned username/Log-out block
@@ -65,19 +65,22 @@ tests/
   dash_callback_utils.py       # shared harness for driving Dash callbacks via /_dash-update-component in tests (no browser)
   test_charts_callbacks.py, test_sites_callbacks.py, test_outages_callbacks.py, test_reconductoring_callbacks.py,
   test_historical_callbacks.py, test_locations_callbacks.py, test_trends_callbacks.py  # Dash-callback tests, all 7 tabs
-docker-compose.yml   # db, db-migrate, web, ingest (profile: ingestion), optional nginx (profile: prodlike)
+docker-compose.yml   # db, db-migrate, web, ingest (profile: ingestion), optional nginx (profile: prodlike) - LOCAL DEV ONLY
 docker-compose.external-test.yml  # gitignored, local-only - points web/ingest at an external MySQL fork via -f
+docker-compose.prod.yml  # PRODUCTION: db-migrate/web/ingest pointed at DATABASE_URL from .env (the managed MySQL DB, no local `db` service) - see DEPLOY.md
+.env.example         # placeholder env var reference for both local dev and DEPLOY.md's production setup - copy to .env and fill in real values (.env itself is gitignored)
+DEPLOY.md             # step-by-step Digital Ocean Droplet (Ubuntu 24.04) production setup guide: server prep, TLS via host nginx+certbot, docker-compose.prod.yml, daily cron jobs for ingest/generate_conductor_summary/generate_rain_rate_fits
 scripts/
   create_external_test_user.py                    # one-off: add a login-capable user to whatever DATABASE_URL points at
   backfill_reconductoring_grease_and_treatment.py  # one-off: backfill reconductoring.grease/conductor_and_treatment from a CSV (--dry-run)
-  backfill_site_coordinates.py                     # one-off: backfill site.latitude/longitude from data/site.csv (--dry-run)
+  backfill_site_coordinates.py                     # repeatable: backfill site.latitude/longitude from data/site_locations.csv, matched by noise_site_id (--dry-run)
   backfill_updated_2026_processed_readings.py      # re-run the "Updated 2026" detection logic over each site's raw Reading history (--dry-run, --force; auto-regenerates sites whose rows predate real leq_rmse data)
   import_leq_rmse_from_sqlite.py                   # bulk-load real leq_rmse values from a local SQLite export into reading.leq_rmse (temp-table + set-based UPDATE, not per-row; --dry-run)
   generate_conductor_summary.py                    # repeatable: fully regenerates the conductor_summary table from current processed_reading data (--dry-run)
   generate_rain_rate_fits.py                       # repeatable: fully regenerates the rain_rate_fit table (per site/detection_logic/metric logarithmic best-fit) from current processed_reading data (--dry-run)
 Dockerfile           # web image (gunicorn)
 docker/Dockerfile.migrate  # migration-only image, also reused (different command) for the `ingest` service
-data/site.csv                # trimmed demo fixture (20 rows), incl. latitude/longitude, used for seeding
+data/site.csv                # trimmed demo fixture (20 rows), used for seeding - carries NO latitude/longitude columns (that claim here was previously stale); coordinates come from data/site_locations.csv instead, via scripts/backfill_site_coordinates.py
 data/user.csv                 # demo user fixture (1 row) - dev-only credentials, see README
 data/processed_reading.csv    # synthetic demo fixture (829 rows) - real ingestion exists but isn't wired to run automatically; this still populates the demo/dev DB
 data/outage_type.csv          # fixed lookup values (monitoring, line) - matches old repo's real seed exactly
@@ -85,6 +88,7 @@ data/outage.csv               # a few demo outage rows
 data/reconductoring.csv       # a few demo reconductoring-event rows (sites 51, 115 - neither's conductor_and_treatment matches the 6 known colour-coded types, see "Known gotchas")
 data/reconductoring_2026.csv  # real Grease/"SC proposed renaming" values, used once against the external fork, not part of the local demo seed
 data/historical_result.csv    # 154 rows ported from the old repo's real data, filtered to the sites in this repo's trimmed data/site.csv
+data/site_locations.csv       # real, manually-curated site coordinates ("Site ID,lon,lat" - a different shape from site.csv, which carries no coordinate columns), growing over time; source of truth for scripts/backfill_site_coordinates.py
 ```
 Local-only, gitignored files used for testing against the external MySQL fork: `.env` (`DATABASE_URL`/`NW_USERNAME`/`NW_PASSWORD`/`NW_BASE_URL`/`INGEST_SITE_IDS`), `docker-compose.external-test.yml`, `ca-certificate.crt` (TLS CA cert). See "How to run against the external MySQL fork" below.
 
@@ -115,14 +119,16 @@ The migration is functionally complete: all 7 of the old app's tabs exist and ar
 
 **Tests** — 240 passing: 155 backend (full-Flask-app tests, pure-function tests, a mocked-HTTP-boundary test, a handful of repository-level tests), 85 Dash-callback tests (all 7 tabs, via `tests/dash_callback_utils.py` driving the real `/app/_dash-update-component` endpoint — Dash callbacks are closures with no importable name, so this is the only way to exercise the actual registered callback rather than a hand-copied stand-in).
 
+**Production deployment** — `DEPLOY.md` is a full step-by-step guide for a Digital Ocean Droplet (Ubuntu 24.04): host setup (ufw, Docker, nginx, certbot), `docker-compose.prod.yml` (points `db-migrate`/`web`/`ingest` at the existing managed MySQL DB via `DATABASE_URL` in `.env` — no local `db` container in prod), TLS via host nginx + Let's Encrypt (not a dockerized nginx — simpler cert renewal via certbot's own systemd timer), and 3 staggered daily cron jobs (`ingest`, then `generate_conductor_summary.py`, then `generate_rain_rate_fits.py`, each wrapped in a `flock`-guarded logging script). Not yet actually run against a real Droplet — the guide is written and locally verified (`docker-compose.prod.yml config` validates, `docker/Dockerfile.migrate` builds and now contains `scripts/`), but no Droplet has been provisioned yet.
+
 ### Outstanding issues
 - **Trends / Age effects sub-tab** — fully unstarted. No table, no offline pre-processing pipeline, no backend function beyond a `[]`-returning placeholder.
 - **Locations tab** — `go.Scattermapbox` is deprecated by the installed Plotly version (cosmetic warning only); a swap to `go.Scattermap` hasn't been done.
-- **Site coordinates on the external fork** — only 12 of 35 real sites have `latitude`/`longitude` (`115, 137, 142, 144, 145, 146, 147, 148, 154, 159, 161, 162` — the rest have no source in `data/site.csv`). The 20 local demo sites' coordinates are approximate town-center locations, not surveyed.
-- **No scheduling for the `ingest` service** — manually-triggered one-shot only, matching the old app (which relied on an uncommitted external cron entry). No APScheduler/Celery/cron-sidecar exists.
+- **Site coordinates on the external fork** — 29 of 35 real sites now have real `latitude`/`longitude` (backfilled 2026-08-03 from `data/site_locations.csv` via `scripts/backfill_site_coordinates.py`, replacing the previous 12 sites' rougher approximate values too). 6 real sites still have no entry in `data/site_locations.csv` and remain uncoordinated; add them there and re-run the script (safe/idempotent) as more real coordinates become available. The local demo DB's 12 overlapping sites were also backfilled with the same real values (previously `NULL` — `data/site.csv` itself carries no coordinate columns, so nothing populated them at seed time).
+- **No scheduling for the `ingest` service locally** — `docker-compose.yml` (local dev) only supports a manually-triggered one-shot, matching the old app. `DEPLOY.md`'s production Droplet setup adds real daily cron scheduling for `ingest` (host crontab + `docker-compose.prod.yml`, not APScheduler/Celery/an in-repo scheduler) — but that's Droplet-only, not something a local `docker compose up` gets.
 - **Ingestion doesn't auto-create `Site` rows** for sites the NW API knows about but the local DB doesn't (deliberately not ported — the old app's field mapping for this was never confirmed, so it was skipped rather than guessed). Any real site must exist in `data/site.csv`/the `site` table first.
 - **Repository-level unit tests are still sparse** below the full-Flask-app-context level — most backend testing goes through a full Flask app; only `test_processing_service.py`/`test_nw_client.py` and a few repository-only test files are Flask-app-free. Not a blocker, a coverage nice-to-have.
-- **No scheduling exists for re-running `generate_rain_rate_fits.py`** (same as `generate_conductor_summary.py` — confirmed via `AskUserQuestion` that a manually-run script, not new scheduling infra, is what's wanted here). Re-run it (locally and against the fork) any time `processed_reading` changes materially, same cadence note as the conductor-summary script.
+- **`generate_conductor_summary.py`/`generate_rain_rate_fits.py` are manually-run locally**, same as the fork (confirmed via `AskUserQuestion` that a manually-run script, not new scheduling infra, is what's wanted there). On the production Droplet (`DEPLOY.md`) both run daily via cron instead, staggered after `ingest`.
 
 ## Known gotchas already hit — don't repeat them
 - `.dockerignore` must not exclude `alembic/versions/` — it did originally, which silently made `alembic upgrade head` a no-op in the migrate container (no error, just nothing to apply).
@@ -149,6 +155,7 @@ The migration is functionally complete: all 7 of the old app's tabs exist and ar
 - **This repo's own Alembic must never be run against the external MySQL fork** — its `alembic_version` table holds the *old app's* real migration bookkeeping (unrelated to this repo's `0001...0013` revision-id namespace despite the identical table name). Every fork schema change is a plain direct `ALTER TABLE`/`CREATE TABLE`, run by you, never through this repo's migration tooling.
 - Auto-mode's write-action classifier unpredictably blocks some direct external-DB write attempts (e.g. an inline `ALTER TABLE` via `python -c`) but not others (a proper `scripts/*.py` invocation, or `docker compose run`) — prefer a real script over an inline one-liner when touching the fork; if blocked, explain the command and get direct execution or explicit approval.
 - Dev environment quirks (Windows host, Git Bash tool): prefix any `docker run`/`docker compose` command containing a bind-mount path with `MSYS_NO_PATHCONV=1` (Git Bash mangles POSIX paths otherwise); `/tmp` is not reliably writable/readable from this Bash tool — use the session's scratchpad directory instead.
+- **A bare `__pycache__/` line in `.dockerignore` does NOT reliably exclude nested `__pycache__` dirs at every depth** (confirmed by building `docker/Dockerfile.migrate` after adding `COPY scripts /app/scripts` — `scripts/__pycache__/*.pyc` still landed in the image). Use `**/__pycache__/` instead. `.gitignore`'s bare `__pycache__/` is unaffected (git's own matching does apply at any depth) — this is a Docker-build-context-specific gotcha, not a general one.
 
 ## Key decisions already made (don't relitigate without reason)
 - Keep the original `transpower-conductor-noise-tool` untouched as a reference copy — never import from it.
@@ -248,7 +255,7 @@ docker compose -f docker-compose.yml -f docker-compose.external-test.yml --profi
 # instead, not repository-based, because of the row counts involved (millions, not thousands) - see "Known gotchas".
 set -a; source .env; set +a
 python scripts/create_external_test_user.py --email you@example.com --password <pw> [--write-access]
-python scripts/backfill_site_coordinates.py --dry-run   # then without --dry-run to apply
+python scripts/backfill_site_coordinates.py --dry-run   # then without --dry-run to apply; safe/idempotent to re-run as data/site_locations.csv grows
 python scripts/generate_conductor_summary.py --dry-run  # re-run any time processed_reading changes materially
 python scripts/generate_rain_rate_fits.py --dry-run      # re-run any time processed_reading changes materially
 

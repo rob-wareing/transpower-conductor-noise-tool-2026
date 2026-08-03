@@ -10,3 +10,4 @@ dist/
 build/
 *.egg-info/
 logs/
+data/transpower_conductor_noise_tool_2026.db

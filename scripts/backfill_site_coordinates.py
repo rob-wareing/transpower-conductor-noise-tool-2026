@@ -1,16 +1,14 @@
-"""One-off: backfill the `site.latitude`/`site.longitude` columns from
-data/site.csv, matched by noise_site_id.
+"""One-off / repeatable: backfill the `site.latitude`/`site.longitude`
+columns from data/site_locations.csv, matched by noise_site_id.
 
-Built for the external MySQL fork (see CLAUDE.md / the external-DB test
-plan): that server's real `site` table got the two new nullable
-latitude/longitude columns added (migration 0008's DDL, applied by hand -
-see CLAUDE.md), but every row's value is still NULL since nothing has ever
-populated them there. This fills in real values from data/site.csv (this
-repo's own demo fixture, which already carries approximate town-center
-coordinates for the same site names/IDs the old app used) for whichever
-noise_site_ids overlap. Only ever UPDATEs rows that already exist (matched
-by noise_site_id) - never inserts/deletes rows, and never touches any other
-column.
+data/site_locations.csv is a manually-curated real-coordinates fixture
+(columns "Site ID", "lon", "lat" - not the same shape as data/site.csv, which
+carries no coordinate columns) covering a growing subset of the real sites
+(currently the external MySQL fork's site table; some ids also overlap the
+local demo fixture's 20 sites). Only ever UPDATEs rows that already exist
+(matched by noise_site_id) - never inserts/deletes rows, and never touches
+any other column. Site ids present in the CSV but not in whatever database
+DATABASE_URL points at are reported, not treated as an error.
 
 Usage:
     DATABASE_URL=mysql+pymysql://... python scripts/backfill_site_coordinates.py [--dry-run]
@@ -24,7 +22,7 @@ from transpower_conductor_noise_tool_2026.backend.persistence.repositories.site_
     SiteRepository,
 )
 
-CSV_PATH = "data/site.csv"
+CSV_PATH = "data/site_locations.csv"
 
 
 def main():
@@ -39,9 +37,9 @@ def main():
         updated, missing = 0, []
         with open(CSV_PATH, newline="", encoding="utf-8") as f:
             for row in csv.DictReader(f):
-                noise_site_id = int(row["noise_site_id"])
-                latitude = float(row["latitude"]) if row["latitude"].strip() else None
-                longitude = float(row["longitude"]) if row["longitude"].strip() else None
+                noise_site_id = int(row["Site ID"])
+                latitude = float(row["lat"]) if row["lat"].strip() else None
+                longitude = float(row["lon"]) if row["lon"].strip() else None
 
                 site = repository.find_by_noise_site_id(noise_site_id)
                 if site is None:

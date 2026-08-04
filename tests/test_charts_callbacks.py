@@ -364,6 +364,7 @@ def test_refresh_chart_table_does_not_send_parameter_interval_or_plot_by(fake_cl
             ("chart-table-status", "children", None),
             ("chart-measurement-duration", "value", None),
             ("chart-detection-logic", "value", None),
+            ("chart-table-collapse", "is_open", True),
         ],
     )
 
@@ -403,10 +404,36 @@ def test_refresh_chart_table_returns_empty_list_when_no_backend():
             ("chart-table-status", "children", None),
             ("chart-measurement-duration", "value", None),
             ("chart-detection-logic", "value", None),
+            ("chart-table-collapse", "is_open", True),
         ],
     )
 
     assert output_value(response, "chart-table", "data") == []
+
+
+def test_refresh_chart_table_skips_fetch_when_collapse_closed(fake_client):
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("chart-table", "data")],
+        inputs=[
+            ("chart-init", "n_intervals", 1),
+            ("chart-site-select", "value", [51]),
+            ("chart-date-range", "start_date", None),
+            ("chart-date-range", "end_date", None),
+            ("chart-condition", "value", None),
+            ("chart-conductor-treatment", "value", None),
+            ("chart-grease", "value", None),
+            ("chart-table-status", "children", None),
+            ("chart-measurement-duration", "value", None),
+            ("chart-detection-logic", "value", None),
+            ("chart-table-collapse", "is_open", False),
+        ],
+    )
+
+    assert not fake_client.get_chart_table_rows.called
+    assert response.status_code == 204
 
 
 # --- save_chart_table -------------------------------------------------

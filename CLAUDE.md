@@ -291,6 +291,12 @@ CREATE TABLE rain_rate_fit (
         REFERENCES site (noise_site_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 -- after creating the table, populate it: python scripts/generate_rain_rate_fits.py --dry-run, then for real
+
+-- migration 0015, NOT YET applied to the fork (full DDL: alembic/versions/0015_add_processed_reading_site_datetime_index.py):
+CREATE INDEX ix_processed_reading_site_datetime ON processed_reading (noise_site_id, datetime);
+
+-- migration 0016, NOT YET applied to the fork (full DDL: alembic/versions/0016_add_site_is_ignored.py):
+ALTER TABLE site ADD COLUMN is_ignored TINYINT(1) NOT NULL DEFAULT 0;
 ```
 If a future migration adds another column/table, add its equivalent statement here and run it the same way (single multi-clause `ALTER TABLE` for any PK change — see "Known gotchas").
 

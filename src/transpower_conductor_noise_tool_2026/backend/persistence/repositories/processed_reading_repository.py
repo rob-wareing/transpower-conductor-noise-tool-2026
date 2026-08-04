@@ -1,3 +1,6 @@
+from sqlalchemy import func
+from sqlalchemy.orm import aliased
+
 from transpower_conductor_noise_tool_2026.backend.extensions import db
 from transpower_conductor_noise_tool_2026.backend.persistence.models.processed_reading import (
     ProcessedReading,
@@ -11,6 +14,13 @@ class ProcessedReadingRepository:
         db.session.commit()
         return len(readings)
 
+    # A flat LIMIT after ORDER BY noise_site_id, datetime always returns a
+    # prefix of sites by id, silently dropping every site that sorts later -
+    # not a random/fair truncation. per_site_limit instead caps each site
+    # independently (keeping its most recent rows), so every site with data
+    # is guaranteed some representation regardless of total row volume.
+    DEFAULT_PER_SITE_LIMIT = 3_000
+
     def list_readings(
         self,
         site_ids=None,
@@ -20,6 +30,8 @@ class ProcessedReadingRepository:
         measurement_duration_minutes=None,
         detection_logic=None,
         include=None,
+        limit=None,
+        per_site_limit=DEFAULT_PER_SITE_LIMIT,
     ):
         query = ProcessedReading.query
 
@@ -40,9 +52,24 @@ class ProcessedReadingRepository:
         if include is not None:
             query = query.filter(ProcessedReading.include == include)
 
-        return query.order_by(
-            ProcessedReading.noise_site_id.asc(), ProcessedReading.datetime.asc()
-        ).all()
+        model = ProcessedReading
+        if per_site_limit is not None:
+            row_number = (
+                func.row_number()
+                .over(
+                    partition_by=ProcessedReading.noise_site_id,
+                    order_by=ProcessedReading.datetime.desc(),
+                )
+                .label("rn")
+            )
+            ranked = query.add_columns(row_number).subquery()
+            model = aliased(ProcessedReading, ranked)
+            query = db.session.query(model).filter(ranked.c.rn <= per_site_limit)
+
+        query = query.order_by(model.noise_site_id.asc(), model.datetime.asc())
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
 
     def find_by_id(self, reading_id):
         return db.session.get(ProcessedReading, reading_id)

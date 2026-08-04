@@ -3,8 +3,11 @@ from transpower_conductor_noise_tool_2026.backend.persistence.models.site import
 
 
 class SiteRepository:
-    def list_sites(self):
-        return Site.query.order_by(Site.noise_site_id.asc()).all()
+    def list_sites(self, include_ignored=False):
+        query = Site.query
+        if not include_ignored:
+            query = query.filter(Site.is_ignored.is_(False))
+        return query.order_by(Site.noise_site_id.asc()).all()
 
     def count_sites(self):
         return Site.query.count()

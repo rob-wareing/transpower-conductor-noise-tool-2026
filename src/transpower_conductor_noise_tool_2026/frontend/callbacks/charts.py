@@ -136,6 +136,7 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("chart-table-status", "children"),
         Input("chart-measurement-duration", "value"),
         Input("chart-detection-logic", "value"),
+        Input("chart-table-collapse", "is_open"),
     )
     def refresh_chart_table(
         _n_intervals,
@@ -148,7 +149,13 @@ def register_callbacks(dash_app, backend_url: str | None):
         _status,
         measurement_duration,
         detection_logic,
+        is_open,
     ):
+        # The table is collapsed by default - skip the fetch entirely until
+        # the user actually opens it, instead of duplicating the figures
+        # endpoint's full fetch/pipeline on every page load regardless.
+        if not is_open:
+            return no_update
         if client is None:
             return []
 

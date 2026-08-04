@@ -5,11 +5,17 @@
 # termination is handled by nginx + certbot on the host, not by a dockerized
 # nginx service, so this file has no `nginx` service either.
 #
+# DATABASE_URL points at the `production` schema, which already exists, is
+# fully populated, and is kept schema-current by hand via direct SQL (see
+# CLAUDE.md) - never via this repo's own Alembic. So `db-migrate`'s default
+# command (`alembic upgrade head && seed_cli`) must never be run bare against
+# it; the service is only ever invoked below with an explicit script override.
+#
 # Usage:
 #   docker compose -f docker-compose.prod.yml build
-#   docker compose -f docker-compose.prod.yml run --rm db-migrate
 #   docker compose -f docker-compose.prod.yml up -d web
 #   docker compose -f docker-compose.prod.yml --profile ingestion run --rm ingest
+#   docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/create_external_test_user.py --email you@transpower.co.nz --password '<pw>' --write-access
 #   docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_conductor_summary.py
 #   docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_rain_rate_fits.py
 
@@ -23,6 +29,13 @@ services:
       sh -c "alembic upgrade head && python -m transpower_conductor_noise_tool_2026.backend.persistence.seed_cli"
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - SITE_FIXTURE_PATH=/app/data/site.csv
+      - USER_FIXTURE_PATH=/app/data/user.csv
+      - PROCESSED_READING_FIXTURE_PATH=/app/data/processed_reading.csv
+      - OUTAGE_TYPE_FIXTURE_PATH=/app/data/outage_type.csv
+      - OUTAGE_FIXTURE_PATH=/app/data/outage.csv
+      - RECONDUCTORING_FIXTURE_PATH=/app/data/reconductoring.csv
+      - HISTORICAL_RESULT_FIXTURE_PATH=/app/data/historical_result.csv
       - AUTO_INIT_DB=false
       - AUTO_SEED_DATA=false
     volumes:
@@ -35,12 +48,27 @@ services:
       dockerfile: Dockerfile
     container_name: conductor_noise_2026_web
     restart: unless-stopped
+    mem_limit: 900m
+    memswap_limit: 900m
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     ports:
       - "5001:5000"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - SECRET_KEY=${SECRET_KEY}
       - SESSION_COOKIE_SECURE=true
+      - SITE_FIXTURE_PATH=/app/data/site.csv
+      - USER_FIXTURE_PATH=/app/data/user.csv
+      - PROCESSED_READING_FIXTURE_PATH=/app/data/processed_reading.csv
+      - OUTAGE_TYPE_FIXTURE_PATH=/app/data/outage_type.csv
+      - OUTAGE_FIXTURE_PATH=/app/data/outage.csv
+      - RECONDUCTORING_FIXTURE_PATH=/app/data/reconductoring.csv
+      - HISTORICAL_RESULT_FIXTURE_PATH=/app/data/historical_result.csv
       - AUTO_INIT_DB=false
       - AUTO_SEED_DATA=false
     volumes:

@@ -31,6 +31,10 @@ class Settings:
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 280,
+    }
     SITE_FIXTURE_PATH = Path(os.environ.get("SITE_FIXTURE_PATH", DEFAULT_SITE_FIXTURE_PATH))
     USER_FIXTURE_PATH = Path(os.environ.get("USER_FIXTURE_PATH", DEFAULT_USER_FIXTURE_PATH))
     PROCESSED_READING_FIXTURE_PATH = Path(

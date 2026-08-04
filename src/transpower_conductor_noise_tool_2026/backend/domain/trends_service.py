@@ -67,11 +67,22 @@ def get_rain_rate_vs_level(filters, repository=None, site_repository=None, fit_r
     fit_repository = fit_repository or RainRateFitRepository()
     metric = filters.metric
 
-    readings = repository.list_readings(
-        site_ids=filters.noise_site_id,
-        detection_logic=filters.detection_logic,
-        include=True,
-        is_wet=None if filters.include_dry else True,
+    # site_repository.list_sites() excludes ignored sites by default - never
+    # query an ignored site's readings, even if explicitly requested by id.
+    sites_by_id = {site.noise_site_id: site for site in site_repository.list_sites()}
+    active_site_ids = set(sites_by_id)
+    requested_site_ids = set(filters.noise_site_id) if filters.noise_site_id else active_site_ids
+    site_ids = sorted(requested_site_ids & active_site_ids)
+
+    readings = (
+        repository.list_readings(
+            site_ids=site_ids,
+            detection_logic=filters.detection_logic,
+            include=True,
+            is_wet=None if filters.include_dry else True,
+        )
+        if site_ids
+        else []
     )
 
     figure = go.Figure()
@@ -83,7 +94,6 @@ def get_rain_rate_vs_level(filters, repository=None, site_repository=None, fit_r
         )
         return _figure_to_json(figure)
 
-    sites_by_id = {site.noise_site_id: site for site in site_repository.list_sites()}
     df = pd.DataFrame(
         [
             {
@@ -324,13 +334,25 @@ def get_conductor_summary(filters, repository=None, site_repository=None, recond
     # matching top-to-bottom reading order (Plotly's categorical y-axis
     # otherwise plots the first entry at the bottom).
     summaries = sorted(summaries, key=lambda s: s.noise_site_id, reverse=True)
+    # list_sites() excludes ignored sites by default - drop any summary row
+    # for an ignored (or otherwise unknown) site rather than falling back to
+    # displaying it under its raw numeric id.
     sites_by_id = {site.noise_site_id: site for site in site_repository.list_sites()}
+    summaries = [s for s in summaries if s.noise_site_id in sites_by_id]
     latest_conductor = _latest_conductor_by_site(reconductoring_repository)
 
-    y = [
-        f"({s.noise_site_id}) {sites_by_id[s.noise_site_id].site_name if s.noise_site_id in sites_by_id else s.noise_site_id} (n={s.sample_count})"
-        for s in summaries
-    ]
+    if not summaries:
+        figure.update_layout(
+            title=(
+                "No conductor summary data for detection_logic="
+                f"{filters.detection_logic!r}, measurement_duration_minutes="
+                f"{filters.measurement_duration_minutes}"
+            ),
+            height=400,
+        )
+        return _figure_to_json(figure)
+
+    y = [f"({s.noise_site_id}) {sites_by_id[s.noise_site_id].site_name} (n={s.sample_count})" for s in summaries]
     groups = {label: _conductor_group(latest_conductor.get(s.noise_site_id)) for s, label in zip(summaries, y)}
 
     for group_name in [*CONDUCTOR_TYPES, "Unknown"]:

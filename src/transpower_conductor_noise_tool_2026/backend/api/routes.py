@@ -25,7 +25,8 @@ def sites():
 
 @bp.get("/sites/detail")
 def sites_detail():
-    items = [site.model_dump() for site in list_site_details()]
+    include_ignored = request.args.get("include_ignored", "").lower() == "true"
+    items = [site.model_dump() for site in list_site_details(include_ignored=include_ignored)]
     return jsonify({"items": items, "count": len(items)})
 
 

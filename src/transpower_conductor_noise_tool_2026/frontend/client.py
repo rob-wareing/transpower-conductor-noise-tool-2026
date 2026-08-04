@@ -50,8 +50,12 @@ class BackendClient:
         response.raise_for_status()
         return UserSummary.model_validate(response.json()["user"])
 
-    def get_site_details(self):
-        response = requests.get(f"{self.base_url}/api/sites/detail", timeout=10)
+    def get_site_details(self, include_ignored: bool = False):
+        response = requests.get(
+            f"{self.base_url}/api/sites/detail",
+            params={"include_ignored": "true"} if include_ignored else None,
+            timeout=10,
+        )
         response.raise_for_status()
         return [SiteDetail.model_validate(item) for item in response.json()["items"]]
 

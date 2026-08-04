@@ -148,8 +148,10 @@ def main():
             if not readings:
                 continue
 
+            # Offline script; _is_stale below must see every existing row's
+            # leq_rmse, not just the interactive per-site cap's most-recent slice.
             existing = processed_reading_repository.list_readings(
-                site_ids=[site.noise_site_id], detection_logic="updated_2026"
+                site_ids=[site.noise_site_id], detection_logic="updated_2026", per_site_limit=None
             )
             stale = _is_stale(existing)
             if existing and not stale and not args.force:

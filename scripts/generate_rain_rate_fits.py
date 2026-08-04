@@ -55,7 +55,11 @@ def main():
     app = create_app({"AUTO_INIT_DB": False, "AUTO_SEED_DATA": False})
     with app.app_context():
         processed_reading_repository = ProcessedReadingRepository()
-        readings = processed_reading_repository.list_readings(is_wet=True, include=True)
+        # Offline/cron batch job, not an interactive request - needs the
+        # full history, not the per-request per-site cap.
+        readings = processed_reading_repository.list_readings(
+            is_wet=True, include=True, per_site_limit=None
+        )
 
         if not readings:
             print("No processed_reading rows match include=1/is_wet=1 - nothing to fit.")

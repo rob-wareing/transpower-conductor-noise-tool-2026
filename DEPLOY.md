@@ -55,7 +55,7 @@ chmod 600 .env
 ```
 
 Edit `.env` and fill in real values:
-- `DATABASE_URL` — the managed MySQL connection string, keeping `ssl_ca=/app/ca-certificate.crt` (that's the path *inside* every container, not on the host).
+- `DATABASE_URL` — the managed MySQL connection string, pointed at the existing `production` schema (already fully populated and schema-current — not `defaultdb`, DigitalOcean's empty default schema), keeping `ssl_ca=/app/ca-certificate.crt` (that's the path *inside* every container, not on the host).
 - `NW_USERNAME` / `NW_PASSWORD` / `NW_BASE_URL` / `INGEST_SITE_IDS` — real Noise and Weather API credentials and site scope.
 - `SECRET_KEY` — generate a real one, don't reuse the dev default:
   ```bash
@@ -74,15 +74,11 @@ scp ca-certificate.crt youruser@<droplet-ip>:/opt/transpower-conductor-noise-too
 ```bash
 docker compose -f docker-compose.prod.yml build
 
-# One-shot: applies migrations, then seeds - safe against the real DB, every
-# seed_*_from_csv() function no-ops once its table already has rows.
-docker compose -f docker-compose.prod.yml run --rm db-migrate
-# Confirm it exited 0 and printed sane seeded_*=0 counts (already-populated
-# real data, not zero because nothing loaded).
-
 docker compose -f docker-compose.prod.yml up -d web
 docker compose -f docker-compose.prod.yml logs -f web   # confirm gunicorn started cleanly, Ctrl-C to stop following
 ```
+
+No `db-migrate` step here: the `production` schema already exists, is fully populated, and is kept in sync by hand via direct SQL (see `CLAUDE.md`) — never by running this repo's own Alembic against it. `web` just connects straight to it via `DATABASE_URL`. The `db-migrate` image is still used below for one-off scripts (step 8's user-creation, step 9's cron jobs), just never invoked with its default `alembic upgrade head && seed_cli` command against this database.
 
 `web` now listens on `127.0.0.1:5001` on the Droplet (not yet publicly reachable — that's what nginx is for next).
 
@@ -179,6 +175,33 @@ Add to the deploy user's crontab (`crontab -e`), staggered so ingestion has time
 
 If ingestion regularly takes longer than 30 minutes, push the later two jobs back further — check `/var/log/conductor-noise/ingest.log` after the first few real runs and adjust.
 
+## 9a. Memory/OOM watchdog
+
+The Droplet has no swap and (before the `mem_limit` added to `docker-compose.prod.yml`) no cgroup memory boundary on the `web` container, so a runaway query could exhaust host RAM and let the kernel OOM killer take out unrelated host processes (sshd, VS Code Remote-SSH) — not just the app. `cron/watchdog.sh` is a cheap early-warning check: it logs a warning line to `/var/log/conductor-noise/watchdog.log` whenever available memory drops below 300MB, the kernel has logged an OOM/SIGKILL event in the last 5 minutes, or `conductor_noise_2026_web`'s gunicorn worker was SIGKILLed in the last 5 minutes.
+
+```bash
+chmod +x /opt/transpower-conductor-noise-tool-2026/cron/watchdog.sh
+```
+
+Add to the deploy user's crontab (`crontab -e`):
+
+```cron
+*/5 * * * * /opt/transpower-conductor-noise-tool-2026/cron/watchdog.sh
+```
+
+Check `/var/log/conductor-noise/watchdog.log` (or `tail -f` it) if the app or the Droplet itself becomes unresponsive.
+
+### Manual triage runbook
+
+If the app or SSH/VS Code becomes unresponsive, check in this order:
+```bash
+free -h                                                              # current memory/swap pressure
+journalctl --list-boots                                              # did the whole VM reboot, not just the container
+docker logs --since 1h conductor_noise_2026_web | grep -i "sigkill\|oom\|timeout"  # worker kills / loopback timeouts
+docker inspect conductor_noise_2026_web --format '{{.State.Health.Status}}'        # container healthcheck status
+cat /var/log/conductor-noise/watchdog.log                            # watchdog warnings, if cron job 9a is installed
+```
+
 ## 10. Docker log rotation
 
 Container logs (`web`, `ingest`) grow unbounded by default. Create `/etc/docker/daemon.json`:
@@ -205,9 +228,10 @@ sudo systemctl restart docker
 cd /opt/transpower-conductor-noise-tool-2026
 git pull
 docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml run --rm db-migrate   # only needed if a new migration was added
 docker compose -f docker-compose.prod.yml up -d web
 ```
+
+If a code change needs a schema change, apply it by hand with direct SQL against the `production` schema (matching how it's been kept in sync so far — see `CLAUDE.md`), not by running this repo's `alembic upgrade head` against it.
 
 ## 12. Backups
 

@@ -1,3 +1,5 @@
+import sqlalchemy as sa
+
 from transpower_conductor_noise_tool_2026.backend.extensions import db
 
 
@@ -14,3 +16,4 @@ class Site(db.Model):
     report_folder = db.Column(db.String(500), nullable=True)
     latitude = db.Column(db.Numeric(9, 6), nullable=True)
     longitude = db.Column(db.Numeric(9, 6), nullable=True)
+    is_ignored = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())

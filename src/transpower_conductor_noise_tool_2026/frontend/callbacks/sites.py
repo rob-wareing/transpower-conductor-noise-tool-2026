@@ -15,6 +15,7 @@ EDITABLE_FIELDS = [
     "report_folder",
     "latitude",
     "longitude",
+    "is_ignored",
 ]
 
 
@@ -29,7 +30,14 @@ def register_callbacks(dash_app, backend_url: str | None):
     def refresh_sites_table(_n_intervals, _status):
         if client is None:
             return []
-        return [site.model_dump() for site in client.get_site_details()]
+        # Ignored sites must still be listed here (and only here) so they
+        # can be un-ignored - every other consumer excludes them by default.
+        rows = []
+        for site in client.get_site_details(include_ignored=True):
+            row = site.model_dump()
+            row["is_ignored"] = int(row["is_ignored"])  # DataTable numeric column, 0/1
+            rows.append(row)
+        return rows
 
     @dash_app.callback(
         Output("sites-status", "children"),

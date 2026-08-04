@@ -110,7 +110,13 @@ def collect_new_readings(
     reading_repository = reading_repository or ReadingRepository()
     processed_reading_repository = processed_reading_repository or ProcessedReadingRepository()
 
-    known_site_ids = {site.noise_site_id for site in site_repository.list_sites()}
+    # include_ignored=True: a site flagged is_ignored is excluded from
+    # display/queries, but ingestion keeps collecting its data so nothing is
+    # lost if it's later un-ignored - this is a separate mechanism from the
+    # NW-API-level IGNORE_SITES skip list below.
+    known_site_ids = {
+        site.noise_site_id for site in site_repository.list_sites(include_ignored=True)
+    }
     allowed_site_ids = set(site_ids) if site_ids else None
 
     summary = {}

@@ -24,6 +24,11 @@ from transpower_conductor_noise_tool_2026.shared.contracts import ChartFilters
 
 PARAMETER_COLUMNS = {"leq_adj", "tone_100hz", "tone_200hz"}
 CONDITION_TO_IS_WET = {"wet": True, "dry": False}
+# Default lower bound for the underlying processed_reading query when the
+# caller hasn't picked a start date - applied here only (not on
+# ChartFilters.start_date itself), so _historical_dataframe's own date
+# filtering of pre-2020 HistoricalResult overlay points is unaffected.
+DEFAULT_CHART_START_DATE = date(2020, 1, 1)
 RAW_COLUMNS = [
     "id",
     "noise_site_id",
@@ -118,6 +123,13 @@ def _rows_to_dataframe(readings, sites_by_id):
     # datetime64 - cast explicitly here so every downstream comparison/
     # arithmetic operation on it is safe even when there are zero readings.
     df["datetime"] = pd.to_datetime(df["datetime"])
+    # Low-cardinality repeated string columns and metric columns don't need
+    # full object/float64 width - shrinks peak memory with no behaviour
+    # change (Plotly/JSON serialization still goes through .tolist(), which
+    # yields plain Python values regardless of the narrower backing dtype).
+    df["site_name"] = df["site_name"].astype("category")
+    for column in ("leq_adj", "tone_100hz", "tone_200hz", "rain1", "rain2"):
+        df[column] = df[column].astype("float32")
     return df
 
 
@@ -289,6 +301,8 @@ def _historical_dataframe(filters: ChartFilters, sites_by_id, historical_reposit
     results = historical_repository.list_results(site_ids=filters.noise_site_id or None)
     records = []
     for result in results:
+        if result.noise_site_id not in sites_by_id:
+            continue  # unknown or ignored site - excluded from display
         if filters.start_date and result.period_end_date <= filters.start_date:
             continue
         if filters.end_date and result.period_end_date > filters.end_date:
@@ -399,7 +413,7 @@ def _build_timeline_chart(df):
         return _figure_to_json(figure)
 
     summary = (
-        df.groupby(["noise_site_id", "site_name"])["datetime"]
+        df.groupby(["noise_site_id", "site_name"], observed=True)["datetime"]
         .agg(["min", "max"])
         .reset_index()
         .sort_values("noise_site_id")
@@ -437,23 +451,32 @@ def _build_timeline_chart(df):
 def _fetch_filtered_readings_dataframe(
     filters: ChartFilters, repository, site_repository, events, outages
 ):
-    start_datetime = (
-        datetime.combine(filters.start_date, datetime.min.time()) if filters.start_date else None
-    )
+    effective_start_date = filters.start_date or DEFAULT_CHART_START_DATE
+    start_datetime = datetime.combine(effective_start_date, datetime.min.time())
     end_datetime = (
         datetime.combine(filters.end_date, datetime.max.time()) if filters.end_date else None
     )
     is_wet = CONDITION_TO_IS_WET.get(filters.condition)
 
-    readings = repository.list_readings(
-        site_ids=filters.noise_site_id or None,
-        start_datetime=start_datetime,
-        end_datetime=end_datetime,
-        is_wet=is_wet,
-        measurement_duration_minutes=filters.measurement_duration,
-        detection_logic=filters.detection_logic,
-    )
+    # site_repository.list_sites() excludes ignored sites by default - never
+    # query an ignored site's readings, even if explicitly requested by id.
     sites_by_id = {site.noise_site_id: site for site in site_repository.list_sites()}
+    active_site_ids = set(sites_by_id)
+    requested_site_ids = set(filters.noise_site_id) if filters.noise_site_id else active_site_ids
+    site_ids = sorted(requested_site_ids & active_site_ids)
+
+    readings = (
+        repository.list_readings(
+            site_ids=site_ids,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            is_wet=is_wet,
+            measurement_duration_minutes=filters.measurement_duration,
+            detection_logic=filters.detection_logic,
+        )
+        if site_ids
+        else []
+    )
 
     df = _rows_to_dataframe(readings, sites_by_id)
     df = _exclude_outage_windows(df, outages)

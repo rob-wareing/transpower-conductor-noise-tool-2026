@@ -15,6 +15,7 @@ COLUMN_DEFS = [
     ("Report folder", "report_folder", "text"),
     ("Latitude", "latitude", "numeric"),
     ("Longitude", "longitude", "numeric"),
+    ("Ignored (0/1)", "is_ignored", "numeric"),
 ]
 
 

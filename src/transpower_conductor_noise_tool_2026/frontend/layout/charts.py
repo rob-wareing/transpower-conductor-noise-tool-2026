@@ -3,6 +3,14 @@ from dash import dash_table, dcc, html
 
 from .table_styles import EDITABLE_CELL_HIGHLIGHT
 
+# The date picker intentionally has no default start_date: refresh_charts
+# treats an empty picker as "use the backend's default window" (see
+# backend.domain.chart_service.DEFAULT_CHART_START_DATE). Setting a visual
+# default here would make Dash fire the callback with an explicit start_date
+# on every load, which would also change what _historical_dataframe splices
+# into the overlay - so the mismatch between "picker looks empty" and "a
+# default is still applied server-side" is deliberate, not an oversight.
+
 CONDITION_OPTIONS = [
     {"label": "All", "value": "all"},
     {"label": "Wet", "value": "wet"},

@@ -27,6 +27,7 @@ class SiteDetail(BaseModel):
     report_folder: str | None = None
     latitude: float | None = None
     longitude: float | None = None
+    is_ignored: bool = False
 
 
 class SiteUpdate(BaseModel):
@@ -37,6 +38,7 @@ class SiteUpdate(BaseModel):
     report_folder: str | None = None
     latitude: float | None = None
     longitude: float | None = None
+    is_ignored: bool | None = None
 
     @field_validator("plot_color")
     @classmethod

@@ -9,9 +9,14 @@ def list_site_summaries(repository: SiteRepository | None = None) -> list[SiteSu
     return [SiteSummary.model_validate(site) for site in repository.list_sites()]
 
 
-def list_site_details(repository: SiteRepository | None = None) -> list[SiteDetail]:
+def list_site_details(
+    include_ignored: bool = False, repository: SiteRepository | None = None
+) -> list[SiteDetail]:
     repository = repository or SiteRepository()
-    return [SiteDetail.model_validate(site) for site in repository.list_sites()]
+    return [
+        SiteDetail.model_validate(site)
+        for site in repository.list_sites(include_ignored=include_ignored)
+    ]
 
 
 def update_site_fields(noise_site_id: int, update: SiteUpdate, repository: SiteRepository | None = None):

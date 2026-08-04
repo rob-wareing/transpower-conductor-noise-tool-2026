@@ -32,6 +32,7 @@ def test_sites_detail_endpoint_returns_full_fields(tmp_path, monkeypatch):
         "report_folder",
         "latitude",
         "longitude",
+        "is_ignored",
     }
 
 

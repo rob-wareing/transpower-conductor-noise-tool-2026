@@ -1,4 +1,6 @@
 from transpower_conductor_noise_tool_2026.backend.app import create_app
+from transpower_conductor_noise_tool_2026.backend.extensions import db
+from transpower_conductor_noise_tool_2026.backend.persistence.models.site import Site
 
 
 def _make_client(tmp_path, monkeypatch):
@@ -51,6 +53,24 @@ def test_charts_endpoint_with_no_matching_data_returns_empty_figures(tmp_path, m
     client = _make_client(tmp_path, monkeypatch)
 
     response = client.post("/api/charts", json={"noise_site_id": [999999]})
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["noise_chart"]["data"] == []
+    assert payload["timeline_chart"]["data"] == []
+
+
+def test_charts_endpoint_excludes_ignored_site_even_when_explicitly_requested(tmp_path, monkeypatch):
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    with app.app_context():
+        site = Site.query.filter_by(noise_site_id=51).first()
+        site.is_ignored = True
+        db.session.commit()
+
+    # Site 51 has seeded demo readings and would normally show data, but an
+    # ignored site's readings must never be queried, even if a stale client
+    # explicitly asks for its id by name.
+    response = client.post("/api/charts", json={"noise_site_id": [51]})
 
     assert response.status_code == 200
     payload = response.get_json()

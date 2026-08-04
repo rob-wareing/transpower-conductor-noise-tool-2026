@@ -125,14 +125,32 @@ def test_charts_endpoint_wider_interval_produces_fewer_or_equal_buckets(tmp_path
     assert _noise_chart_point_count(four_weeks) <= _noise_chart_point_count(one_week)
 
 
+def test_charts_endpoint_hides_historical_results_by_default(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    # Site 115 has HistoricalResult rows up to 2019 - show_historical defaults
+    # to False, so a plain request must never include them.
+    response = client.post("/api/charts", json={"noise_site_id": [115]})
+
+    assert response.status_code == 200
+    payload = response.get_json()["noise_chart"]["data"][0]
+    dates = payload["x"]
+    assert not any(str(d).startswith("2019") or str(d).startswith("2016") for d in dates)
+    assert any(str(d).startswith("2025") for d in dates)
+
+
 def test_charts_endpoint_overlays_historical_results_before_cutover(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
 
     # Site 115 has both ProcessedReading rows (2025) and HistoricalResult rows
     # (up to 2019) - the historical points should appear alongside the bucketed
     # current-data points, since none of the current data predates the cutover.
-    without_historical = client.post("/api/charts", json={"noise_site_id": [999999]})
-    with_historical = client.post("/api/charts", json={"noise_site_id": [115]})
+    without_historical = client.post(
+        "/api/charts", json={"noise_site_id": [999999], "show_historical": True}
+    )
+    with_historical = client.post(
+        "/api/charts", json={"noise_site_id": [115], "show_historical": True}
+    )
 
     assert without_historical.status_code == 200
     assert with_historical.status_code == 200
@@ -147,7 +165,8 @@ def test_charts_endpoint_excludes_historical_results_for_dry_condition(tmp_path,
     client = _make_client(tmp_path, monkeypatch)
 
     response = client.post(
-        "/api/charts", json={"noise_site_id": [115], "condition": "dry"}
+        "/api/charts",
+        json={"noise_site_id": [115], "condition": "dry", "show_historical": True},
     )
 
     assert response.status_code == 200

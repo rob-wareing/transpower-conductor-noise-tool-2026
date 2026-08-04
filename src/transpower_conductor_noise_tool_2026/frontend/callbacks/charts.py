@@ -79,6 +79,7 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("chart-plot-by", "value"),
         Input("chart-measurement-duration", "value"),
         Input("chart-detection-logic", "value"),
+        Input("chart-show-historical", "value"),
     )
     def refresh_charts(
         _n_intervals,
@@ -93,6 +94,7 @@ def register_callbacks(dash_app, backend_url: str | None):
         plot_by,
         measurement_duration,
         detection_logic,
+        show_historical,
     ):
         empty_figure = {"data": [], "layout": {}}
         if client is None:
@@ -110,6 +112,7 @@ def register_callbacks(dash_app, backend_url: str | None):
             plot_by=plot_by or "datetime",
             measurement_duration=MEASUREMENT_DURATION_TO_MINUTES.get(measurement_duration, 15),
             detection_logic=detection_logic or "original",
+            show_historical=bool(show_historical),
         )
         charts = client.get_charts(filters)
         return charts["noise_chart"], charts["timeline_chart"]

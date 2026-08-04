@@ -513,8 +513,13 @@ def get_chart_figures(
         chart_df = pd.DataFrame(columns=BUCKETED_COLUMNS)
     else:
         bucketed_df = _bucket_readings(df, filters.interval_weeks, group_by_conductor)
-        historical_df = _historical_dataframe(filters, sites_by_id, historical_repository, events)
-        chart_df = _combine_with_historical(bucketed_df, historical_df)
+        if filters.show_historical:
+            historical_df = _historical_dataframe(
+                filters, sites_by_id, historical_repository, events
+            )
+            chart_df = _combine_with_historical(bucketed_df, historical_df)
+        else:
+            chart_df = bucketed_df
 
     linestyles = _build_linestyle_index(events)
     noise_chart = _build_noise_chart(

@@ -201,6 +201,16 @@ def content(write_access: bool = False):
                                 ],
                                 style={"minWidth": "220px"},
                             ),
+                            html.Div(
+                                [
+                                    dbc.Switch(
+                                        id="chart-show-historical",
+                                        label="Show historical",
+                                        value=False,
+                                    ),
+                                ],
+                                style={"minWidth": "180px", "alignSelf": "flex-end"},
+                            ),
                         ],
                         style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
                     ),

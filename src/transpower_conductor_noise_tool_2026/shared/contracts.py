@@ -74,6 +74,7 @@ class ChartFilters(BaseModel):
     plot_by: str = "datetime"
     measurement_duration: int = 15
     detection_logic: str = "original"
+    show_historical: bool = False
 
     @field_validator("interval_weeks")
     @classmethod

@@ -202,6 +202,7 @@ def _chart_inputs(**overrides):
         "chart-plot-by.value": None,
         "chart-measurement-duration.value": None,
         "chart-detection-logic.value": None,
+        "chart-show-historical.value": None,
     }
     values.update(overrides)
     return [(key.split(".")[0], key.split(".")[1], value) for key, value in values.items()]
@@ -239,6 +240,7 @@ def test_refresh_charts_fills_in_defaults_for_falsy_inputs(fake_client):
     assert filters.plot_by == "datetime"
     assert filters.measurement_duration == 15
     assert filters.detection_logic == "original"
+    assert filters.show_historical is False
 
 
 def test_refresh_charts_passes_through_explicit_filter_values(fake_client):
@@ -261,6 +263,7 @@ def test_refresh_charts_passes_through_explicit_filter_values(fake_client):
             "chart-plot-by.value": "days_since_conductoring",
             "chart-measurement-duration.value": "1min",
             "chart-detection-logic.value": "updated_2026",
+            "chart-show-historical.value": True,
         }),
     )
 
@@ -274,6 +277,7 @@ def test_refresh_charts_passes_through_explicit_filter_values(fake_client):
     assert filters.plot_by == "days_since_conductoring"
     assert filters.measurement_duration == 1
     assert filters.detection_logic == "updated_2026"
+    assert filters.show_historical is True
 
 
 def test_refresh_charts_returns_empty_figures_when_no_backend():

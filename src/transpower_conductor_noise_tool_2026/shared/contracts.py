@@ -289,3 +289,19 @@ class HistoricalResultUpdate(BaseModel):
     period_end_date: date | None = None
     leq_adj: float | None = None
     tone_100hz: float | None = None
+
+
+class WindRoseSector(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    direction_sector: str
+    sample_count: int
+    avg_wind_speed: float
+
+
+class MonthlyRainfall(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    month: int
+    avg_rain_mm: float
+    sample_count: int

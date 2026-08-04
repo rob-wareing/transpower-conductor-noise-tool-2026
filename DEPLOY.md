@@ -175,7 +175,20 @@ Add to the deploy user's crontab (`crontab -e`), staggered so ingestion has time
 
 If ingestion regularly takes longer than 30 minutes, push the later two jobs back further — check `/var/log/conductor-noise/ingest.log` after the first few real runs and adjust.
 
-## 9a. Memory/OOM watchdog
+## 9a. Weekly derived-table regeneration
+
+`wind_rose` and `monthly_rainfall` are precomputed from the raw `reading` table's full history (site-level wind rose + climatological monthly average rainfall, shown on the Locations tab when a site is clicked) via a single set-based SQL aggregation each (`ReadingRepository.aggregate_wind_rose`/`aggregate_monthly_rainfall`), not the pandas-based approach the daily `conductor-summary`/`rain-rate-fits` jobs above use — `reading` is a ~2.4M-row table, too large to pull wholesale into pandas the way those two jobs do against the much smaller `processed_reading` table. Both are cheap enough, and change slowly enough, to regenerate weekly rather than daily.
+
+Reuses the same `cron/run.sh` wrapper as the daily jobs above (no new infra needed). Add to the deploy user's crontab (`crontab -e`), a full hour clear of the daily jobs' latest possible start and staggered from each other:
+
+```cron
+0 3 * * 0  /opt/transpower-conductor-noise-tool-2026/cron/run.sh wind-rose "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_wind_rose.py"
+15 3 * * 0 /opt/transpower-conductor-noise-tool-2026/cron/run.sh monthly-rainfall "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_monthly_rainfall.py"
+```
+
+Sunday 3am (`0 3 * * 0`). These read `reading` directly, so they only need the 2am `ingest` job's raw-row upsert to have completed by 3am — not the two derived-`processed_reading` jobs that follow it.
+
+## 9b. Memory/OOM watchdog
 
 The Droplet has no swap and (before the `mem_limit` added to `docker-compose.prod.yml`) no cgroup memory boundary on the `web` container, so a runaway query could exhaust host RAM and let the kernel OOM killer take out unrelated host processes (sshd, VS Code Remote-SSH) — not just the app. `cron/watchdog.sh` is a cheap early-warning check: it logs a warning line to `/var/log/conductor-noise/watchdog.log` whenever available memory drops below 300MB, the kernel has logged an OOM/SIGKILL event in the last 5 minutes, or `conductor_noise_2026_web`'s gunicorn worker was SIGKILLed in the last 5 minutes.
 
@@ -199,7 +212,7 @@ free -h                                                              # current m
 journalctl --list-boots                                              # did the whole VM reboot, not just the container
 docker logs --since 1h conductor_noise_2026_web | grep -i "sigkill\|oom\|timeout"  # worker kills / loopback timeouts
 docker inspect conductor_noise_2026_web --format '{{.State.Health.Status}}'        # container healthcheck status
-cat /var/log/conductor-noise/watchdog.log                            # watchdog warnings, if cron job 9a is installed
+cat /var/log/conductor-noise/watchdog.log                            # watchdog warnings, if cron job 9b is installed
 ```
 
 ## 10. Docker log rotation

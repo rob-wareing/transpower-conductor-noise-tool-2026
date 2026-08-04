@@ -9,6 +9,7 @@ from transpower_conductor_noise_tool_2026.shared.contracts import (
     HistoricalResultCreate,
     HistoricalResultDetail,
     HistoricalResultUpdate,
+    MonthlyRainfall,
     OutageCreate,
     OutageDetail,
     OutageUpdate,
@@ -21,6 +22,7 @@ from transpower_conductor_noise_tool_2026.shared.contracts import (
     SiteSummary,
     SiteUpdate,
     UserSummary,
+    WindRoseSector,
 )
 
 
@@ -58,6 +60,18 @@ class BackendClient:
         )
         response.raise_for_status()
         return [SiteDetail.model_validate(item) for item in response.json()["items"]]
+
+    def get_wind_rose(self, noise_site_id: int):
+        response = requests.get(f"{self.base_url}/api/sites/{noise_site_id}/wind-rose", timeout=10)
+        response.raise_for_status()
+        return [WindRoseSector.model_validate(item) for item in response.json()["items"]]
+
+    def get_monthly_rainfall(self, noise_site_id: int):
+        response = requests.get(
+            f"{self.base_url}/api/sites/{noise_site_id}/monthly-rainfall", timeout=10
+        )
+        response.raise_for_status()
+        return [MonthlyRainfall.model_validate(item) for item in response.json()["items"]]
 
     def update_site(self, noise_site_id: int, update: SiteUpdate, cookies):
         return requests.patch(

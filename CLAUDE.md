@@ -78,6 +78,8 @@ scripts/
   import_leq_rmse_from_sqlite.py                   # bulk-load real leq_rmse values from a local SQLite export into reading.leq_rmse (temp-table + set-based UPDATE, not per-row; --dry-run)
   generate_conductor_summary.py                    # repeatable: fully regenerates the conductor_summary table from current processed_reading data (--dry-run)
   generate_rain_rate_fits.py                       # repeatable: fully regenerates the rain_rate_fit table (per site/detection_logic/metric logarithmic best-fit) from current processed_reading data (--dry-run)
+  generate_wind_rose.py                            # repeatable: fully regenerates the wind_rose table (per site x 16 compass sector) from current reading data via a set-based SQL GROUP BY, not pandas (--dry-run); cron-scheduled weekly, see DEPLOY.md
+  generate_monthly_rainfall.py                     # repeatable: fully regenerates the monthly_rainfall table (per site x calendar month, climatological) from current reading data via a set-based SQL GROUP BY, not pandas (--dry-run); cron-scheduled weekly, see DEPLOY.md
 Dockerfile           # web image (gunicorn)
 docker/Dockerfile.migrate  # migration-only image, also reused (different command) for the `ingest` service
 data/site.csv                # trimmed demo fixture (20 rows), used for seeding - carries NO latitude/longitude columns (that claim here was previously stale); coordinates come from data/site_locations.csv instead, via scripts/backfill_site_coordinates.py
@@ -106,7 +108,7 @@ The migration is functionally complete: all 7 of the old app's tabs exist and ar
 
 **Sites / Outages / Reconductoring / Historical tabs** — Sites is edit-only (matches the old app; no add/delete flow, new sites only arrive via `data/site.csv`). Outages/Reconductoring/Historical are genuinely add/edit/delete-capable via per-row REST endpoints, with the **frontend** diffing the submitted table against server state to decide what to call (a deliberate divergence from the old app's single generic bulk-sync callback). All 5 tabs with tabular data have in-memory CSV export.
 
-**Locations tab** — real per-site map (`Site.latitude`/`longitude`), built from `GET /api/sites/detail`; a deliberate improvement over the old app's 5-hardcoded-dummy-point stub. Read-only, no write callback (matches old app).
+**Locations tab** — real per-site map (`Site.latitude`/`longitude`), built from `GET /api/sites/detail`; a deliberate improvement over the old app's 5-hardcoded-dummy-point stub. Read-only, no write callback (matches old app). Clicking a site marker also populates a wind rose (`go.Barpolar`, 16 compass sectors) and a climatological average-monthly-rainfall bar chart, both read from the raw `reading` table via two materialized tables (`wind_rose`, `monthly_rainfall`) precomputed by `scripts/generate_wind_rose.py`/`generate_monthly_rainfall.py` (set-based SQL `GROUP BY` via `ReadingRepository.aggregate_wind_rose`/`aggregate_monthly_rainfall`, not pandas — `reading` is ~2.4M rows, too large to pull wholesale) and regenerated weekly via cron (`DEPLOY.md` "Weekly derived-table regeneration"). Sentinel/invalid raw values (`wind_speed >= 200`, `rain_mm >= 99` — reading's ingestion-time cap-invalid convention, see `processing_service.MAX_VALID_WIND_SPEED`/`MAX_VALID_RAIN_FALL`) are excluded from both aggregations.
 
 **Ingestion + processing** — `NoiseAndWeatherClient` → `processing_service.py` (pure pandas transform) → `ingestion_job.py::collect_new_readings` (orchestrator). Two detection-logic pipelines run side by side per ingested reading, each writing its own tagged `ProcessedReading` rows (never blended): `original` (the initial port) and `updated_2026` (`processing_service_updated_2026.py` — 22:00–05:00 window, `wind < 1.5`, current-period-only `is_wet`, no Leq−L90 filter, a valid-sensor-data check, an `leq_rmse` threshold check). `leq_rmse` is a real calculation (`processing_service.calculate_leq_rmse`): an OLS straight-line fit against the NW API's `Leq900` 1-second-per-period field, RMSE of the residuals, `NULL` if `Leq900` is missing or <50% populated. Historical `reading.leq_rmse` values (predating this calculation) were separately backfilled from an external SQLite export.
 
@@ -297,6 +299,32 @@ CREATE INDEX ix_processed_reading_site_datetime ON processed_reading (noise_site
 
 -- migration 0016, NOT YET applied to the fork (full DDL: alembic/versions/0016_add_site_is_ignored.py):
 ALTER TABLE site ADD COLUMN is_ignored TINYINT(1) NOT NULL DEFAULT 0;
+
+-- migration 0017, NOT YET applied to the fork (full DDL: alembic/versions/0017_create_wind_rose.py):
+CREATE TABLE wind_rose (
+    noise_site_id INT NOT NULL,
+    direction_sector VARCHAR(3) NOT NULL,
+    sample_count INT NOT NULL,
+    avg_wind_speed DECIMAL(4,1) NOT NULL,
+    computed_at DATETIME NOT NULL,
+    PRIMARY KEY (noise_site_id, direction_sector),
+    CONSTRAINT fk_wind_rose_site FOREIGN KEY (noise_site_id)
+        REFERENCES site (noise_site_id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+-- after creating the table, populate it: python scripts/generate_wind_rose.py --dry-run, then for real
+
+-- migration 0018, NOT YET applied to the fork (full DDL: alembic/versions/0018_create_monthly_rainfall.py):
+CREATE TABLE monthly_rainfall (
+    noise_site_id INT NOT NULL,
+    month INT NOT NULL,
+    avg_rain_mm DECIMAL(4,2) NOT NULL,
+    sample_count INT NOT NULL,
+    computed_at DATETIME NOT NULL,
+    PRIMARY KEY (noise_site_id, month),
+    CONSTRAINT fk_monthly_rainfall_site FOREIGN KEY (noise_site_id)
+        REFERENCES site (noise_site_id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+-- after creating the table, populate it: python scripts/generate_monthly_rainfall.py --dry-run, then for real
 ```
 If a future migration adds another column/table, add its equivalent statement here and run it the same way (single multi-clause `ALTER TABLE` for any PK change — see "Known gotchas").
 

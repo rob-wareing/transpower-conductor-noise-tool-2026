@@ -197,7 +197,7 @@ def content():
         [
             html.H2("Trends Analysis"),
             html.P(
-                "This tab is ready for trend analysis features to be implemented.",
+                "General trends analysis.",
                 className="text-muted",
             ),
             dbc.Tabs(

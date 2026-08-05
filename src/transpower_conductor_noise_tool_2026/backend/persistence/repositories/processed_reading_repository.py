@@ -1,4 +1,6 @@
-from sqlalchemy import func
+from datetime import datetime
+
+from sqlalchemy import bindparam, func
 from sqlalchemy.orm import aliased
 
 from transpower_conductor_noise_tool_2026.backend.extensions import db
@@ -77,3 +79,54 @@ class ProcessedReadingRepository:
     def save(self, reading):
         db.session.commit()
         return reading
+
+    RECALCULATE_CHUNK_SIZE = 5_000
+
+    def recalculate_reconductoring_ages(self, cutoffs_by_site, dry_run=False):
+        # cutoffs_by_site: {noise_site_id: date} from
+        # ReconductoringRepository.latest_by_site() - a site with no entry
+        # has no reconductoring history, so every one of its rows gets NULL.
+        # Every row is recomputed on every call, not just new ones - a new
+        # reconductoring event can retroactively turn a previously-aged row
+        # back to NULL (it now predates the site's *new* most recent
+        # conductor), so this can't be done incrementally.
+        site_ids = [row[0] for row in db.session.query(ProcessedReading.noise_site_id).distinct()]
+
+        updates = []
+        for noise_site_id in site_ids:
+            cutoff_date = cutoffs_by_site.get(noise_site_id)
+            cutoff_datetime = (
+                datetime.combine(cutoff_date, datetime.min.time()) if cutoff_date else None
+            )
+            rows = (
+                db.session.query(ProcessedReading.id, ProcessedReading.datetime)
+                .filter(ProcessedReading.noise_site_id == noise_site_id)
+                .all()
+            )
+            for row_id, row_datetime in rows:
+                if cutoff_datetime is not None and row_datetime >= cutoff_datetime:
+                    age = (row_datetime - cutoff_datetime).days
+                else:
+                    age = None
+                updates.append({"_id": row_id, "_age": age})
+
+        summary = {
+            "total": len(updates),
+            "aged": sum(1 for u in updates if u["_age"] is not None),
+            "nulled": sum(1 for u in updates if u["_age"] is None),
+        }
+
+        if dry_run or not updates:
+            return summary
+
+        table = ProcessedReading.__table__
+        stmt = (
+            table.update()
+            .where(table.c.id == bindparam("_id"))
+            .values(reconductoring_age=bindparam("_age"))
+        )
+        for start in range(0, len(updates), self.RECALCULATE_CHUNK_SIZE):
+            chunk = updates[start : start + self.RECALCULATE_CHUNK_SIZE]
+            db.session.execute(stmt, chunk)
+        db.session.commit()
+        return summary

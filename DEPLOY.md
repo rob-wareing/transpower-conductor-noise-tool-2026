@@ -171,22 +171,26 @@ Add to the deploy user's crontab (`crontab -e`), staggered so ingestion has time
 0 2 * * *  /opt/transpower-conductor-noise-tool-2026/cron/run.sh ingest "docker compose -f docker-compose.prod.yml --profile ingestion run --rm ingest"
 30 2 * * * /opt/transpower-conductor-noise-tool-2026/cron/run.sh conductor-summary "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_conductor_summary.py"
 45 2 * * * /opt/transpower-conductor-noise-tool-2026/cron/run.sh rain-rate-fits "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_rain_rate_fits.py"
+55 2 * * * /opt/transpower-conductor-noise-tool-2026/cron/run.sh reconductoring-age "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/calculate_reconductoring_age.py"
+5 3 * * *  /opt/transpower-conductor-noise-tool-2026/cron/run.sh conductor-age-fits "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_conductor_age_fits.py"
 ```
 
-If ingestion regularly takes longer than 30 minutes, push the later two jobs back further — check `/var/log/conductor-noise/ingest.log` after the first few real runs and adjust.
+`reconductoring-age` must run after `ingest` (new processed_reading rows need an age computed) but has no dependency on `conductor-summary`/`rain-rate-fits` - it's staggered after them here purely to keep the whole chain simple, not because of an ordering requirement. `conductor-age-fits` mirrors `rain-rate-fits`'s own relationship to `generate_conductor_summary.py`: it must run after `reconductoring-age` (the fit reads that column) - see backend/domain/trends_service.py's Age effects tab.
+
+If ingestion regularly takes longer than 30 minutes, push the later jobs back further — check `/var/log/conductor-noise/ingest.log` after the first few real runs and adjust.
 
 ## 9a. Weekly derived-table regeneration
 
 `wind_rose` and `monthly_rainfall` are precomputed from the raw `reading` table's full history (site-level wind rose + climatological monthly average rainfall, shown on the Locations tab when a site is clicked) via a single set-based SQL aggregation each (`ReadingRepository.aggregate_wind_rose`/`aggregate_monthly_rainfall`), not the pandas-based approach the daily `conductor-summary`/`rain-rate-fits` jobs above use — `reading` is a ~2.4M-row table, too large to pull wholesale into pandas the way those two jobs do against the much smaller `processed_reading` table. Both are cheap enough, and change slowly enough, to regenerate weekly rather than daily.
 
-Reuses the same `cron/run.sh` wrapper as the daily jobs above (no new infra needed). Add to the deploy user's crontab (`crontab -e`), a full hour clear of the daily jobs' latest possible start and staggered from each other:
+Reuses the same `cron/run.sh` wrapper as the daily jobs above (no new infra needed). Add to the deploy user's crontab (`crontab -e`), clear of the daily jobs' latest possible finish (now `conductor-age-fits` at 3:05am) and staggered from each other:
 
 ```cron
-0 3 * * 0  /opt/transpower-conductor-noise-tool-2026/cron/run.sh wind-rose "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_wind_rose.py"
-15 3 * * 0 /opt/transpower-conductor-noise-tool-2026/cron/run.sh monthly-rainfall "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_monthly_rainfall.py"
+30 3 * * 0 /opt/transpower-conductor-noise-tool-2026/cron/run.sh wind-rose "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_wind_rose.py"
+45 3 * * 0 /opt/transpower-conductor-noise-tool-2026/cron/run.sh monthly-rainfall "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_monthly_rainfall.py"
 ```
 
-Sunday 3am (`0 3 * * 0`). These read `reading` directly, so they only need the 2am `ingest` job's raw-row upsert to have completed by 3am — not the two derived-`processed_reading` jobs that follow it.
+Sunday 3:30am. These read `reading` directly, so they only need the 2am `ingest` job's raw-row upsert to have completed - not any of the derived-`processed_reading` jobs that follow it - but are scheduled after the whole daily chain anyway to keep the crontab simple and avoid any risk of overlapping `db-migrate` container runs on Sundays.
 
 ## 9b. Memory/OOM watchdog
 

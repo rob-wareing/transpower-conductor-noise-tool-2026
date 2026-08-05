@@ -2,6 +2,9 @@ from datetime import date, datetime
 
 from transpower_conductor_noise_tool_2026.backend.app import create_app
 from transpower_conductor_noise_tool_2026.backend.extensions import db
+from transpower_conductor_noise_tool_2026.backend.persistence.models.conductor_age_fit import (
+    ConductorAgeFit,
+)
 from transpower_conductor_noise_tool_2026.backend.persistence.models.conductor_summary import (
     ConductorSummary,
 )
@@ -338,5 +341,113 @@ def test_rain_rate_vs_level_endpoint_rejects_invalid_metric(tmp_path, monkeypatc
     _app, client = _make_app_and_client(tmp_path, monkeypatch)
 
     response = client.post("/api/trends/rain-rate-vs-level", json={"metric": "leq"})
+
+    assert response.status_code == 400
+
+
+def test_age_effects_endpoint_returns_a_valid_empty_figure_with_no_data(tmp_path, monkeypatch):
+    _app, client = _make_app_and_client(tmp_path, monkeypatch)
+
+    # detection_logic="updated_2026" keeps this scoped away from the demo
+    # seed's baseline rows, same trick used throughout this suite.
+    response = client.post("/api/trends/age-effects", json={"detection_logic": "updated_2026"})
+
+    assert response.status_code == 200
+    chart = response.get_json()["age_effects_chart"]
+    assert chart["data"] == []
+    assert "No processed reading data" in chart["layout"]["title"]["text"]
+
+
+def test_age_effects_endpoint_excludes_rows_with_null_reconductoring_age(tmp_path, monkeypatch):
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    _seed_processed_reading(
+        app, detection_logic="updated_2026", reconductoring_age=None, l90=40.0
+    )
+    _seed_processed_reading(
+        app,
+        detection_logic="updated_2026",
+        reconductoring_age=10,
+        l90=44.0,
+        datetime=datetime(2026, 8, 3, 23, 15, 0),
+    )
+
+    response = client.post("/api/trends/age-effects", json={"detection_logic": "updated_2026"})
+
+    assert response.status_code == 200
+    chart = response.get_json()["age_effects_chart"]
+    assert len(chart["data"]) == 1
+    assert chart["data"][0]["x"] == [10]
+    assert chart["data"][0]["y"] == [44.0]
+
+
+def test_age_effects_endpoint_filters_by_site(tmp_path, monkeypatch):
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    _seed_processed_reading(app, noise_site_id=KNOWN_SITE, reconductoring_age=5)
+    _seed_processed_reading(
+        app,
+        noise_site_id=OTHER_KNOWN_SITE,
+        reconductoring_age=5,
+        datetime=datetime(2026, 8, 3, 23, 15, 0),
+    )
+
+    response = client.post("/api/trends/age-effects", json={"noise_site_id": [KNOWN_SITE]})
+
+    assert response.status_code == 200
+    chart = response.get_json()["age_effects_chart"]
+    assert len(chart["data"]) == 1
+
+
+def _seed_conductor_age_fit(app, **overrides):
+    defaults = dict(
+        noise_site_id=KNOWN_SITE,
+        detection_logic="updated_2026",
+        metric="l90",
+        slope=4.0,
+        intercept=40.0,
+        r_squared=0.8,
+        sample_count=10,
+        computed_at=datetime(2026, 8, 5, 0, 0, 0),
+    )
+    defaults.update(overrides)
+    with app.app_context():
+        db.session.add(ConductorAgeFit(**defaults))
+        db.session.commit()
+
+
+def test_age_effects_endpoint_includes_a_fit_line_when_one_is_stored(tmp_path, monkeypatch):
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    _seed_processed_reading(
+        app, detection_logic="updated_2026", reconductoring_age=10, l90=40.0,
+        datetime=datetime(2026, 8, 3, 23, 0, 0),
+    )
+    _seed_processed_reading(
+        app, detection_logic="updated_2026", reconductoring_age=20, l90=44.0,
+        datetime=datetime(2026, 8, 3, 23, 15, 0),
+    )
+    _seed_conductor_age_fit(app)
+
+    response = client.post(
+        "/api/trends/age-effects",
+        json={"detection_logic": "updated_2026", "metric": "l90"},
+    )
+
+    assert response.status_code == 200
+    chart = response.get_json()["age_effects_chart"]
+    assert len(chart["data"]) == 2
+    assert chart["data"][1]["mode"] == "lines"
+
+
+def test_age_effects_endpoint_rejects_invalid_detection_logic(tmp_path, monkeypatch):
+    _app, client = _make_app_and_client(tmp_path, monkeypatch)
+
+    response = client.post("/api/trends/age-effects", json={"detection_logic": "bogus"})
+
+    assert response.status_code == 400
+
+
+def test_age_effects_endpoint_rejects_invalid_metric(tmp_path, monkeypatch):
+    _app, client = _make_app_and_client(tmp_path, monkeypatch)
+
+    response = client.post("/api/trends/age-effects", json={"metric": "leq"})
 
     assert response.status_code == 400

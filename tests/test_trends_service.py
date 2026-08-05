@@ -6,13 +6,10 @@ import pytest
 
 from transpower_conductor_noise_tool_2026.backend.domain import trends_service
 from transpower_conductor_noise_tool_2026.shared.contracts import (
+    AgeEffectsFilters,
     ConductorSummaryFilters,
     RainRateVsLevelFilters,
 )
-
-
-def test_get_age_effects_is_a_placeholder_that_returns_empty():
-    assert trends_service.get_age_effects() == []
 
 
 def _reading(noise_site_id, detection_logic, rain1, l90, tone_100hz, tone_200hz, is_wet=True):
@@ -309,6 +306,175 @@ def test_compute_rain_rate_fits_separates_detection_logic_groups():
     l90_records = [r for r in records if r["metric"] == "l90"]
 
     assert {r["detection_logic"] for r in l90_records} == {"original", "updated_2026"}
+
+
+def _age_reading(noise_site_id, detection_logic, reconductoring_age, l90, tone_100hz, tone_200hz):
+    return SimpleNamespace(
+        noise_site_id=noise_site_id,
+        detection_logic=detection_logic,
+        reconductoring_age=reconductoring_age,
+        l90=l90,
+        tone_100hz=tone_100hz,
+        tone_200hz=tone_200hz,
+    )
+
+
+class _FakeConductorAgeFitRepository:
+    def __init__(self, fits=()):
+        self._fits = list(fits)
+
+    def list_fits(self, noise_site_id=None, detection_logic=None, metric=None):
+        return [
+            f
+            for f in self._fits
+            if (not noise_site_id or f.noise_site_id in noise_site_id)
+            and (detection_logic is None or f.detection_logic == detection_logic)
+            and (metric is None or f.metric == metric)
+        ]
+
+
+def test_get_age_effects_builds_one_trace_per_site():
+    readings = [
+        _age_reading(51, "original", reconductoring_age=10, l90=40.0, tone_100hz=1.0, tone_200hz=0.5),
+        _age_reading(51, "original", reconductoring_age=20, l90=44.0, tone_100hz=1.5, tone_200hz=0.8),
+        _age_reading(137, "original", reconductoring_age=5, l90=38.0, tone_100hz=2.0, tone_200hz=1.0),
+    ]
+    filters = AgeEffectsFilters(detection_logic="original", metric="l90")
+
+    figure = trends_service.get_age_effects(
+        filters,
+        repository=_FakeProcessedReadingRepository(readings),
+        site_repository=_FakeSiteRepository(
+            [
+                SimpleNamespace(noise_site_id=51, site_name="Site A"),
+                SimpleNamespace(noise_site_id=137, site_name="Site B"),
+            ]
+        ),
+        fit_repository=_FakeConductorAgeFitRepository(),
+    )
+
+    assert len(figure["data"]) == 2  # one trace per site
+    site_51_trace = figure["data"][0]
+    assert site_51_trace["mode"] == "markers"
+    assert site_51_trace["x"] == [10, 20]
+    assert site_51_trace["y"] == [40.0, 44.0]
+    assert "Site A" in site_51_trace["name"]
+
+
+def test_get_age_effects_excludes_rows_with_null_reconductoring_age():
+    readings = [
+        _age_reading(51, "original", reconductoring_age=None, l90=40.0, tone_100hz=1.0, tone_200hz=0.5),
+        _age_reading(51, "original", reconductoring_age=10, l90=44.0, tone_100hz=1.5, tone_200hz=0.8),
+    ]
+    filters = AgeEffectsFilters(detection_logic="original", metric="l90")
+
+    figure = trends_service.get_age_effects(
+        filters,
+        repository=_FakeProcessedReadingRepository(readings),
+        site_repository=_FakeSiteRepository([SimpleNamespace(noise_site_id=51, site_name="Site A")]),
+        fit_repository=_FakeConductorAgeFitRepository(),
+    )
+
+    assert len(figure["data"]) == 1
+    assert figure["data"][0]["x"] == [10]  # the NULL-age row never appears
+    assert figure["data"][0]["y"] == [44.0]
+
+
+def test_get_age_effects_returns_empty_figure_with_message_when_no_data():
+    filters = AgeEffectsFilters(detection_logic="updated_2026")
+
+    figure = trends_service.get_age_effects(
+        filters,
+        repository=_FakeProcessedReadingRepository([]),
+        site_repository=_FakeSiteRepository([]),
+        fit_repository=_FakeConductorAgeFitRepository(),
+    )
+
+    assert figure["data"] == []
+    assert "No processed reading data" in figure["layout"]["title"]["text"]
+
+
+def test_get_age_effects_adds_a_dashed_fit_line_matching_marker_color():
+    readings = [
+        _age_reading(51, "original", reconductoring_age=10, l90=40.0, tone_100hz=1.0, tone_200hz=0.5),
+        _age_reading(51, "original", reconductoring_age=20, l90=44.0, tone_100hz=1.0, tone_200hz=0.5),
+    ]
+    fits = [_fit(51, "original", "l90", slope=4.0, intercept=40.0)]
+    filters = AgeEffectsFilters(detection_logic="original", metric="l90")
+
+    figure = trends_service.get_age_effects(
+        filters,
+        repository=_FakeProcessedReadingRepository(readings),
+        site_repository=_FakeSiteRepository([SimpleNamespace(noise_site_id=51, site_name="Site A")]),
+        fit_repository=_FakeConductorAgeFitRepository(fits),
+    )
+
+    assert len(figure["data"]) == 2
+    marker_trace, line_trace = figure["data"]
+    assert marker_trace["mode"] == "markers"
+    assert line_trace["mode"] == "lines"
+    assert line_trace["line"]["dash"] == "dash"
+    assert line_trace["line"]["color"] == marker_trace["marker"]["color"]
+
+
+def test_compute_conductor_age_fits_recovers_a_known_logarithmic_relationship():
+    import numpy as np
+
+    age = np.array([1.0, 2.0, 4.0, 8.0, 16.0])
+    true_slope, true_intercept = 5.0, 30.0
+    l90 = true_slope * np.log(age) + true_intercept
+    df = pd.DataFrame(
+        {
+            "noise_site_id": [51] * 5,
+            "detection_logic": ["original"] * 5,
+            "reconductoring_age": age,
+            "l90": l90,
+            "tone_100hz": l90,
+            "tone_200hz": l90,
+        }
+    )
+
+    records = trends_service.compute_conductor_age_fits(df)
+    l90_record = next(r for r in records if r["metric"] == "l90")
+
+    assert l90_record["noise_site_id"] == 51
+    assert l90_record["sample_count"] == 5
+    assert l90_record["slope"] == pytest.approx(true_slope, abs=1e-6)
+    assert l90_record["intercept"] == pytest.approx(true_intercept, abs=1e-6)
+    assert l90_record["r_squared"] == pytest.approx(1.0, abs=1e-6)
+
+
+def test_compute_conductor_age_fits_skips_groups_with_fewer_than_three_points():
+    df = pd.DataFrame(
+        {
+            "noise_site_id": [51, 51],
+            "detection_logic": ["original", "original"],
+            "reconductoring_age": [1.0, 2.0],
+            "l90": [40.0, 44.0],
+            "tone_100hz": [1.0, 1.0],
+            "tone_200hz": [0.5, 0.5],
+        }
+    )
+
+    assert trends_service.compute_conductor_age_fits(df) == []
+
+
+def test_compute_conductor_age_fits_excludes_zero_age():
+    df = pd.DataFrame(
+        {
+            "noise_site_id": [51, 51, 51, 51],
+            "detection_logic": ["original"] * 4,
+            "reconductoring_age": [0.0, 1.0, 2.0, 4.0],
+            "l90": [40.0, 40.0, 44.0, 48.0],
+            "tone_100hz": [1.0, 1.0, 1.0, 1.0],
+            "tone_200hz": [0.5, 0.5, 0.5, 0.5],
+        }
+    )
+
+    records = trends_service.compute_conductor_age_fits(df)
+    l90_record = next(r for r in records if r["metric"] == "l90")
+
+    assert l90_record["sample_count"] == 3  # the age=0.0 row excluded
 
 
 def _rows(

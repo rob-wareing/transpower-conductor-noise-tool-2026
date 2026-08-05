@@ -6,6 +6,9 @@ import plotly.colors
 import plotly.graph_objects as go
 import plotly.io as pio
 
+from transpower_conductor_noise_tool_2026.backend.persistence.repositories.conductor_age_fit_repository import (
+    ConductorAgeFitRepository,
+)
 from transpower_conductor_noise_tool_2026.backend.persistence.repositories.conductor_summary_repository import (
     ConductorSummaryRepository,
 )
@@ -27,9 +30,8 @@ from transpower_conductor_noise_tool_2026.backend.persistence.repositories.site_
 # desync once fit-line traces are interleaved with marker traces).
 SITE_COLOR_PALETTE = plotly.colors.qualitative.Plotly
 
-# Rain rate vs level and Conductor summary both operate over the same three
-# acoustic metrics; Age effects' backing table doesn't exist yet, so it stays
-# a placeholder below.
+# Rain rate vs level, Conductor summary, and Age effects all operate over
+# the same three acoustic metrics.
 METRICS = ["l90", "tone_100hz", "tone_200hz"]
 METRIC_LABELS = {
     "l90": "L90",
@@ -206,8 +208,164 @@ def compute_rain_rate_fits(df):
     return records
 
 
-def get_age_effects():
-    return []
+def get_age_effects(filters, repository=None, site_repository=None, fit_repository=None):
+    # Scatter of the selected metric (y) against reconductoring_age, the
+    # number of days since each row's site had its most recent
+    # reconductoring (x) - one point per raw processed_reading row, one
+    # coloured trace per site, same structure as get_rain_rate_vs_level.
+    # Rows with a NULL reconductoring_age (predate the site's current
+    # conductor, or the site has no reconductoring history at all - see
+    # scripts/calculate_reconductoring_age.py) are excluded entirely, not
+    # just from the fit - "not displayed" per the column's own contract.
+    # Only include=1 rows count, matching Rain rate vs level's convention.
+    # measurement_duration_minutes is deliberately NOT filtered, same
+    # reasoning as Rain rate vs level - every duration is shown.
+    #
+    # Each site with a stored conductor_age_fit row also gets a dashed
+    # logarithmic best-fit line, precomputed rather than refit on every
+    # request - the fit is looked up, never recomputed, here.
+    repository = repository or ProcessedReadingRepository()
+    site_repository = site_repository or SiteRepository()
+    fit_repository = fit_repository or ConductorAgeFitRepository()
+    metric = filters.metric
+
+    sites_by_id = {site.noise_site_id: site for site in site_repository.list_sites()}
+    active_site_ids = set(sites_by_id)
+    requested_site_ids = set(filters.noise_site_id) if filters.noise_site_id else active_site_ids
+    site_ids = sorted(requested_site_ids & active_site_ids)
+
+    readings = (
+        [
+            reading
+            for reading in repository.list_readings(
+                site_ids=site_ids, detection_logic=filters.detection_logic, include=True
+            )
+            if reading.reconductoring_age is not None
+        ]
+        if site_ids
+        else []
+    )
+
+    figure = go.Figure()
+
+    if not readings:
+        figure.update_layout(
+            title=f"No processed reading data for detection_logic={filters.detection_logic!r}",
+            height=500,
+        )
+        return _figure_to_json(figure)
+
+    df = pd.DataFrame(
+        [
+            {
+                "noise_site_id": reading.noise_site_id,
+                "site_name": (
+                    sites_by_id[reading.noise_site_id].site_name
+                    if reading.noise_site_id in sites_by_id
+                    else str(reading.noise_site_id)
+                ),
+                "reconductoring_age": reading.reconductoring_age,
+                "value": float(getattr(reading, metric)),
+            }
+            for reading in readings
+        ]
+    )
+
+    fits_by_site = {
+        fit.noise_site_id: fit
+        for fit in fit_repository.list_fits(
+            noise_site_id=filters.noise_site_id,
+            detection_logic=filters.detection_logic,
+            metric=metric,
+        )
+    }
+
+    for index, (noise_site_id, group) in enumerate(
+        df.sort_values("noise_site_id").groupby("noise_site_id")
+    ):
+        color = SITE_COLOR_PALETTE[index % len(SITE_COLOR_PALETTE)]
+        site_name = group["site_name"].iloc[0]
+        legend_group = f"site-{noise_site_id}"
+        figure.add_trace(
+            go.Scatter(
+                x=group["reconductoring_age"].tolist(),
+                y=group["value"].tolist(),
+                mode="markers",
+                name=f"({noise_site_id}) {site_name}",
+                marker=dict(color=color),
+                legendgroup=legend_group,
+            )
+        )
+
+        fit = fits_by_site.get(noise_site_id)
+        if fit is None:
+            continue
+        positive_age = group.loc[group["reconductoring_age"] > 0, "reconductoring_age"]
+        if positive_age.empty:
+            continue
+        x_fit = np.linspace(positive_age.min(), positive_age.max(), 30)
+        y_fit = float(fit.slope) * np.log(x_fit) + float(fit.intercept)
+        figure.add_trace(
+            go.Scatter(
+                x=x_fit.tolist(),
+                y=y_fit.tolist(),
+                mode="lines",
+                name=f"({noise_site_id}) {site_name} — fit",
+                line=dict(color=color, dash="dash"),
+                legendgroup=legend_group,
+                showlegend=False,
+            )
+        )
+
+    figure.update_layout(
+        title=(
+            f"Age effects — {METRIC_LABELS[metric]} — "
+            f"detection_logic={filters.detection_logic}"
+        ),
+        xaxis_title="Days since most recent reconductoring",
+        yaxis_title=METRIC_LABELS[metric],
+        height=600,
+    )
+    return _figure_to_json(figure)
+
+
+def compute_conductor_age_fits(df):
+    # df: one row per already-filtered processed_reading (include=1, non-
+    # NULL reconductoring_age), columns noise_site_id, detection_logic,
+    # reconductoring_age, l90, tone_100hz, tone_200hz. For each metric
+    # independently, groups by (noise_site_id, detection_logic), fits
+    # metric = slope*ln(reconductoring_age) + intercept via np.polyfit over
+    # rows with reconductoring_age > 0 (log undefined at 0 - the row measured
+    # on the exact day of reconductoring). A group with fewer than 3
+    # qualifying points is skipped entirely - not enough data for a
+    # meaningful fit - matching compute_rain_rate_fits' own convention.
+    aged = df[df["reconductoring_age"] > 0]
+    records = []
+    for metric in METRICS:
+        for (noise_site_id, detection_logic), group in aged.groupby(
+            ["noise_site_id", "detection_logic"]
+        ):
+            if len(group) < 3:
+                continue
+            log_age = np.log(group["reconductoring_age"].to_numpy(dtype=float))
+            values = group[metric].to_numpy()
+            slope, intercept = np.polyfit(log_age, values, 1)
+            predicted = slope * log_age + intercept
+            ss_res = float(np.sum((values - predicted) ** 2))
+            ss_tot = float(np.sum((values - values.mean()) ** 2))
+            r_squared = 1 - ss_res / ss_tot if ss_tot > 0 else None
+            records.append(
+                {
+                    "noise_site_id": int(noise_site_id),
+                    "detection_logic": detection_logic,
+                    "metric": metric,
+                    "slope": round(float(slope), 4),
+                    "intercept": round(float(intercept), 4),
+                    "r_squared": round(r_squared, 4) if r_squared is not None else None,
+                    "sample_count": int(len(group)),
+                }
+            )
+    return records
 
 
 # dict (not a plain list) so insertion order also serves as the canonical

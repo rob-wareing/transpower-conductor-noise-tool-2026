@@ -1,6 +1,7 @@
 from dash import Input, Output
 
 from transpower_conductor_noise_tool_2026.shared.contracts import (
+    AgeEffectsFilters,
     ConductorSummaryFilters,
     RainRateVsLevelFilters,
 )
@@ -80,3 +81,35 @@ def register_callbacks(dash_app, backend_url: str | None):
             measurement_duration_minutes=measurement_duration_minutes or 15,
         )
         return client.get_conductor_summary_chart(filters)
+
+    @dash_app.callback(
+        Output("trends-age-effects-site-select", "options"),
+        Input("trends-age-effects-init", "n_intervals"),
+    )
+    def populate_age_effects_site_options(_n_intervals):
+        if client is None:
+            return []
+
+        return [
+            {"label": f"({site.noise_site_id}) {site.site_name}", "value": site.noise_site_id}
+            for site in client.get_sites()
+        ]
+
+    @dash_app.callback(
+        Output("trends-age-effects-chart", "figure"),
+        Input("trends-age-effects-init", "n_intervals"),
+        Input("trends-age-effects-detection-logic", "value"),
+        Input("trends-age-effects-metric", "value"),
+        Input("trends-age-effects-site-select", "value"),
+    )
+    def refresh_age_effects_chart(_n_intervals, detection_logic, metric, site_ids):
+        empty_figure = {"data": [], "layout": {}}
+        if client is None:
+            return empty_figure
+
+        filters = AgeEffectsFilters(
+            noise_site_id=site_ids or [],
+            detection_logic=detection_logic or "original",
+            metric=metric or "l90",
+        )
+        return client.get_age_effects_chart(filters)

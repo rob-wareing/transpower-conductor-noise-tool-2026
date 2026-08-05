@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import requests
 
 from transpower_conductor_noise_tool_2026.shared.contracts import (
+    AgeEffectsFilters,
     ChartFilters,
     ChartTableRow,
     ConductorSummaryFilters,
@@ -107,6 +108,15 @@ class BackendClient:
         )
         response.raise_for_status()
         return response.json()["rain_rate_vs_level_chart"]
+
+    def get_age_effects_chart(self, filters: AgeEffectsFilters):
+        response = requests.post(
+            f"{self.base_url}/api/trends/age-effects",
+            json=filters.model_dump(mode="json"),
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()["age_effects_chart"]
 
     def get_chart_table_rows(self, filters: ChartFilters):
         response = requests.post(

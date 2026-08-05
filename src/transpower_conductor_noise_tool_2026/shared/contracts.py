@@ -154,6 +154,26 @@ class RainRateVsLevelFilters(BaseModel):
         raise ValueError("metric must be 'l90', 'tone_100hz', or 'tone_200hz'")
 
 
+class AgeEffectsFilters(BaseModel):
+    noise_site_id: List[int] = []
+    detection_logic: str = "original"
+    metric: str = "l90"
+
+    @field_validator("detection_logic")
+    @classmethod
+    def validate_detection_logic(cls, value):
+        if value in {"original", "updated_2026"}:
+            return value
+        raise ValueError("detection_logic must be 'original' or 'updated_2026'")
+
+    @field_validator("metric")
+    @classmethod
+    def validate_metric(cls, value):
+        if value in {"l90", "tone_100hz", "tone_200hz"}:
+            return value
+        raise ValueError("metric must be 'l90', 'tone_100hz', or 'tone_200hz'")
+
+
 class SiteListResponse(BaseModel):
     items: List[SiteSummary]
 

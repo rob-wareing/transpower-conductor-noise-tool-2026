@@ -1,3 +1,4 @@
+from .conductor_age_fit import ConductorAgeFit
 from .conductor_summary import ConductorSummary
 from .historical_result import HistoricalResult
 from .monthly_rainfall import MonthlyRainfall

@@ -236,3 +236,103 @@ def test_refresh_conductor_summary_chart_handles_no_backend():
 
     figure = output_value(response, "trends-conductor-summary-chart", "figure")
     assert figure == {"data": [], "layout": {}}
+
+
+# --- populate_age_effects_site_options --------------------------------------
+
+
+def test_populate_age_effects_site_options_formats_label_from_client(fake_client):
+    fake_client.get_sites.return_value = [
+        SiteSummary(noise_site_id=51, site_name="Demo Site", site_code="DS"),
+    ]
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-age-effects-site-select", "options")],
+        inputs=[("trends-age-effects-init", "n_intervals", 1)],
+    )
+
+    options = output_value(response, "trends-age-effects-site-select", "options")
+    assert options == [{"label": "(51) Demo Site", "value": 51}]
+
+
+def test_populate_age_effects_site_options_handles_no_backend():
+    app = _build_app(fake_client=None, backend_url=None)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-age-effects-site-select", "options")],
+        inputs=[("trends-age-effects-init", "n_intervals", 1)],
+    )
+
+    assert output_value(response, "trends-age-effects-site-select", "options") == []
+
+
+# --- refresh_age_effects_chart -----------------------------------------------
+
+
+def test_refresh_age_effects_chart_passes_selected_filters(fake_client):
+    fake_client.get_age_effects_chart.return_value = {
+        "data": [{"type": "scatter"}],
+        "layout": {},
+    }
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-age-effects-chart", "figure")],
+        inputs=[
+            ("trends-age-effects-init", "n_intervals", 1),
+            ("trends-age-effects-detection-logic", "value", "updated_2026"),
+            ("trends-age-effects-metric", "value", "tone_200hz"),
+            ("trends-age-effects-site-select", "value", [51, 137]),
+        ],
+    )
+
+    figure = output_value(response, "trends-age-effects-chart", "figure")
+    assert figure == {"data": [{"type": "scatter"}], "layout": {}}
+
+    filters = fake_client.get_age_effects_chart.call_args[0][0]
+    assert filters.detection_logic == "updated_2026"
+    assert filters.metric == "tone_200hz"
+    assert filters.noise_site_id == [51, 137]
+
+
+def test_refresh_age_effects_chart_defaults_when_dropdowns_empty(fake_client):
+    fake_client.get_age_effects_chart.return_value = {"data": [], "layout": {}}
+    app = _build_app(fake_client)
+
+    dispatch_callback(
+        app,
+        outputs=[("trends-age-effects-chart", "figure")],
+        inputs=[
+            ("trends-age-effects-init", "n_intervals", 1),
+            ("trends-age-effects-detection-logic", "value", None),
+            ("trends-age-effects-metric", "value", None),
+            ("trends-age-effects-site-select", "value", None),
+        ],
+    )
+
+    filters = fake_client.get_age_effects_chart.call_args[0][0]
+    assert filters.detection_logic == "original"
+    assert filters.metric == "l90"
+    assert filters.noise_site_id == []
+
+
+def test_refresh_age_effects_chart_handles_no_backend():
+    app = _build_app(fake_client=None, backend_url=None)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-age-effects-chart", "figure")],
+        inputs=[
+            ("trends-age-effects-init", "n_intervals", 1),
+            ("trends-age-effects-detection-logic", "value", "original"),
+            ("trends-age-effects-metric", "value", "l90"),
+            ("trends-age-effects-site-select", "value", []),
+        ],
+    )
+
+    figure = output_value(response, "trends-age-effects-chart", "figure")
+    assert figure == {"data": [], "layout": {}}

@@ -80,6 +80,8 @@ scripts/
   generate_rain_rate_fits.py                       # repeatable: fully regenerates the rain_rate_fit table (per site/detection_logic/metric logarithmic best-fit) from current processed_reading data (--dry-run)
   generate_wind_rose.py                            # repeatable: fully regenerates the wind_rose table (per site x 16 compass sector) from current reading data via a set-based SQL GROUP BY, not pandas (--dry-run); cron-scheduled weekly, see DEPLOY.md
   generate_monthly_rainfall.py                     # repeatable: fully regenerates the monthly_rainfall table (per site x calendar month, climatological) from current reading data via a set-based SQL GROUP BY, not pandas (--dry-run); cron-scheduled weekly, see DEPLOY.md
+  calculate_reconductoring_age.py                  # repeatable: recalculates processed_reading.reconductoring_age from each site's most recent reconductoring event, a bulk UPDATE not a materialized table (--dry-run); cron-scheduled daily, see DEPLOY.md
+  generate_conductor_age_fits.py                   # repeatable: fully regenerates the conductor_age_fit table (per site/detection_logic/metric logarithmic best-fit vs. reconductoring_age) from current processed_reading data (--dry-run); cron-scheduled daily, see DEPLOY.md
 Dockerfile           # web image (gunicorn)
 docker/Dockerfile.migrate  # migration-only image, also reused (different command) for the `ingest` service
 data/site.csv                # trimmed demo fixture (20 rows), used for seeding - carries NO latitude/longitude columns (that claim here was previously stale); coordinates come from data/site_locations.csv instead, via scripts/backfill_site_coordinates.py
@@ -115,7 +117,7 @@ The migration is functionally complete: all 7 of the old app's tabs exist and ar
 **Trends tab** — 3 sub-tabs:
 - **Conductor summary** — real, populated. A materialized `conductor_summary` table (one row per site × detection_logic × measurement_duration_minutes, regenerated from `processed_reading` by `scripts/generate_conductor_summary.py`) displayed as a single horizontal box plot, one box per site, coloured by each site's *current* conductor type (from `reconductoring`'s most recent event per site, limited to Zebra/Goat/Curlew/Sulphur/Pheasant/Chukar with an "Unknown" fallback for no-match/no-event sites). Filters: metric, detection_logic, measurement_duration_minutes, site multi-select.
 - **Rain rate vs level** — real, populated. Scatter of the selected metric against `rain1`, one coloured trace per site, reading raw `processed_reading` rows directly (no materialized table). Filters: detection_logic, metric, site multi-select (default all), "Include dry" toggle (default `False` — dry/`is_wet=0` points excluded by default). Each site with a stored `rain_rate_fit` row also gets a dashed logarithmic best-fit line (`metric = slope*ln(rain1) + intercept`) in the same colour as that site's markers — the fit itself is **precomputed** (`trends_service.compute_rain_rate_fits` + `scripts/generate_rain_rate_fits.py`, one row per site × detection_logic × metric in the `rain_rate_fit` table, fit over wet/included/`rain1>0` rows, skipped if <3 qualifying points) and only looked up at request time, never refit per chart request/filter change.
-- **Age effects** — still a placeholder. No table, no pipeline, `trends_service.get_age_effects()` returns `[]`.
+- **Age effects** — real, populated. Scatter of the selected metric against `processed_reading.reconductoring_age` (days since each site's most recent reconductoring event - see `scripts/calculate_reconductoring_age.py`/`ProcessedReadingRepository.recalculate_reconductoring_ages`, NULL for rows that predate a site's current conductor or for sites with no reconductoring history, and such rows are excluded from the chart entirely, not just from the fit), one coloured trace per site, reading raw `processed_reading` rows directly (no materialized table for the scatter itself). Filters: detection_logic, metric, site multi-select (default all) - same structure as Rain rate vs level, minus its "Include dry" toggle (not relevant here). Each site with a stored `conductor_age_fit` row also gets a dashed logarithmic best-fit line (`metric = slope*ln(reconductoring_age) + intercept`), same colour as that site's markers - precomputed (`trends_service.compute_conductor_age_fits` + `scripts/generate_conductor_age_fits.py`, one row per site × detection_logic × metric, fit over included rows with `reconductoring_age > 0` - log undefined at 0 - skipped if <3 qualifying points) and only looked up at request time, mirroring Rain rate vs level's own fit-lookup pattern exactly.
 
 **External MySQL fork** — the app has been proven end-to-end against a real forked production database (not just local demo fixtures) and the real NW API. Schema is fully in sync through migration `0014` (every column/table applied there via direct `ALTER TABLE`/`CREATE TABLE`, run by you — see "How to run against the external fork" for why). Real data loaded: ~1.64M real `leq_rmse` values, a 137,044-row `updated_2026` backfill, a 54-row `conductor_summary`, a 162-row `rain_rate_fit` (60 sites × both detection_logics × 3 metrics, generated 2026-08-03 via `scripts/generate_rain_rate_fits.py`).
 
@@ -325,6 +327,26 @@ CREATE TABLE monthly_rainfall (
         REFERENCES site (noise_site_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 -- after creating the table, populate it: python scripts/generate_monthly_rainfall.py --dry-run, then for real
+
+-- migration 0019, NOT YET applied to the fork (full DDL: alembic/versions/0019_add_processed_reading_reconductoring_age.py):
+ALTER TABLE processed_reading ADD COLUMN reconductoring_age INT NULL;
+-- after adding the column, populate it: python scripts/calculate_reconductoring_age.py
+
+-- migration 0020, NOT YET applied to the fork (full DDL: alembic/versions/0020_create_conductor_age_fit.py):
+CREATE TABLE conductor_age_fit (
+    noise_site_id INT NOT NULL,
+    detection_logic VARCHAR(20) NOT NULL,
+    metric VARCHAR(20) NOT NULL,
+    slope DECIMAL(10,4) NOT NULL,
+    intercept DECIMAL(10,4) NOT NULL,
+    r_squared DECIMAL(5,4) NULL,
+    sample_count INT NOT NULL,
+    computed_at DATETIME NOT NULL,
+    PRIMARY KEY (noise_site_id, detection_logic, metric),
+    CONSTRAINT fk_conductor_age_fit_site FOREIGN KEY (noise_site_id)
+        REFERENCES site (noise_site_id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+-- after creating the table (and after reconductoring_age is populated), run: python scripts/generate_conductor_age_fits.py --dry-run, then for real
 ```
 If a future migration adds another column/table, add its equivalent statement here and run it the same way (single multi-clause `ALTER TABLE` for any PK change — see "Known gotchas").
 

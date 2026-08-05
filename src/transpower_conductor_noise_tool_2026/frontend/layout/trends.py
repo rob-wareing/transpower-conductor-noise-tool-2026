@@ -5,10 +5,6 @@ RAIN_RATE_VS_LEVEL_TAB_ID = "trends-rain-rate-vs-level"
 AGE_EFFECTS_TAB_ID = "trends-age-effects"
 CONDUCTOR_SUMMARY_TAB_ID = "trends-conductor-summary"
 
-PLACEHOLDER_SUB_TABS = [
-    ("Age effects", AGE_EFFECTS_TAB_ID),
-]
-
 DETECTION_LOGIC_OPTIONS = [
     {"label": "Original", "value": "original"},
     {"label": "Updated 2026", "value": "updated_2026"},
@@ -29,20 +25,6 @@ INCLUDE_DRY_OPTIONS = [
     {"label": "True", "value": True},
     {"label": "False", "value": False},
 ]
-
-
-def _placeholder_panel(message):
-    return html.Div(
-        [html.P("Coming Soon"), html.P(message)],
-        style={
-            "height": "400px",
-            "display": "flex",
-            "flexDirection": "column",
-            "alignItems": "center",
-            "justifyContent": "center",
-            "border": "2px dashed #ccc",
-        },
-    )
 
 
 def _rain_rate_vs_level_panel():
@@ -163,6 +145,53 @@ def _conductor_summary_panel():
     )
 
 
+def _age_effects_panel():
+    return html.Div(
+        [
+            dcc.Interval(
+                id="trends-age-effects-init", interval=1000, n_intervals=0, max_intervals=1
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Label("Detection logic"),
+                            dcc.Dropdown(
+                                id="trends-age-effects-detection-logic",
+                                options=DETECTION_LOGIC_OPTIONS,
+                                value="original",
+                                clearable=False,
+                            ),
+                        ],
+                        style={"minWidth": "220px"},
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Metric"),
+                            dcc.Dropdown(
+                                id="trends-age-effects-metric",
+                                options=METRIC_OPTIONS,
+                                value="l90",
+                                clearable=False,
+                            ),
+                        ],
+                        style={"minWidth": "180px"},
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Sites"),
+                            dcc.Dropdown(id="trends-age-effects-site-select", multi=True),
+                        ],
+                        style={"minWidth": "400px", "maxWidth": "700px"},
+                    ),
+                ],
+                style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
+            ),
+            dcc.Graph(id="trends-age-effects-chart"),
+        ]
+    )
+
+
 def content():
     return html.Div(
         [
@@ -178,14 +207,11 @@ def content():
                         label="Rain rate vs level",
                         tab_id=RAIN_RATE_VS_LEVEL_TAB_ID,
                     ),
-                    *[
-                        dbc.Tab(
-                            _placeholder_panel(f"{label} will be added here in a future update."),
-                            label=label,
-                            tab_id=tab_id,
-                        )
-                        for label, tab_id in PLACEHOLDER_SUB_TABS
-                    ],
+                    dbc.Tab(
+                        _age_effects_panel(),
+                        label="Age effects",
+                        tab_id=AGE_EFFECTS_TAB_ID,
+                    ),
                     dbc.Tab(
                         _conductor_summary_panel(),
                         label="Conductor summary",

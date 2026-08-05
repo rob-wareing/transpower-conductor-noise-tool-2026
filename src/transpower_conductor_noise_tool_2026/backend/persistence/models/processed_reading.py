@@ -22,6 +22,14 @@ class ProcessedReading(db.Model):
     # updated_2026 detection logic (see processing_service_updated_2026.py) -
     # always NULL for "original"-tagged rows.
     leq_rmse = db.Column(db.Numeric(5, 2), nullable=True)
+    # Days between this row's datetime and its site's most recent
+    # reconductoring event, i.e. how long the *current* conductor has been in
+    # place. NULL for rows that predate the site's latest reconductoring (an
+    # older conductor - not comparable) or for sites with no reconductoring
+    # history at all. See scripts/calculate_reconductoring_age.py /
+    # ProcessedReadingRepository.recalculate_reconductoring_ages for how this
+    # is (re)computed - it is not maintained at ingestion time.
+    reconductoring_age = db.Column(db.Integer, nullable=True)
 
     __table_args__ = (
         db.ForeignKeyConstraint(

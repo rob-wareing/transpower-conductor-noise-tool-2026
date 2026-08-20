@@ -80,12 +80,16 @@ def _build_wind_rose_figure(sectors):
 
 
 def _build_monthly_rainfall_figure(months):
+    # total_rain (summed across every year of history for that month), not
+    # avg_rain_mm (a single reading's average) - avg_rain_mm is still
+    # computed and stored (see monthly_rainfall_repository.py) but no longer
+    # charted here.
     by_month = {row.month: row for row in months}
-    values = [by_month[m].avg_rain_mm if m in by_month else 0 for m in range(1, 13)]
+    values = [by_month[m].total_rain if m in by_month else 0 for m in range(1, 13)]
 
     figure = go.Figure(go.Bar(x=MONTH_LABELS, y=values))
     figure.update_layout(
-        title="Average Monthly Rainfall",
+        title="Total Monthly Rainfall",
         yaxis_title="Rain (mm)",
         height=400,
     )

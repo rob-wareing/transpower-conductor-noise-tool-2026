@@ -19,11 +19,12 @@ def _make_app(tmp_path, monkeypatch):
     return create_app({"TESTING": True})
 
 
-def _month(noise_site_id, month, avg_rain_mm=2.0, sample_count=10):
+def _month(noise_site_id, month, avg_rain_mm=2.0, total_rain=20.0, sample_count=10):
     return MonthlyRainfall(
         noise_site_id=noise_site_id,
         month=month,
         avg_rain_mm=avg_rain_mm,
+        total_rain=total_rain,
         sample_count=sample_count,
         computed_at=datetime(2026, 8, 4, 0, 0, 0),
     )
@@ -58,6 +59,7 @@ def test_replace_all_fully_replaces_prior_contents(tmp_path, monkeypatch):
                     "noise_site_id": SITE_B,
                     "month": 6,
                     "avg_rain_mm": 4.5,
+                    "total_rain": 31.5,
                     "sample_count": 7,
                     "computed_at": datetime(2026, 8, 4, 0, 0, 0),
                 }

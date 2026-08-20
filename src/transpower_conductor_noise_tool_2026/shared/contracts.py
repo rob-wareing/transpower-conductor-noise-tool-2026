@@ -332,4 +332,5 @@ class MonthlyRainfall(BaseModel):
 
     month: int
     avg_rain_mm: float
+    total_rain: float
     sample_count: int

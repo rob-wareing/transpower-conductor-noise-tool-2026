@@ -95,13 +95,17 @@ class ReadingRepository:
 
     def aggregate_monthly_rainfall(self, noise_site_id=None):
         # Climatological - grouped by calendar month only (not year), so two
-        # different years' Januaries combine into one month=1 row.
+        # different years' Januaries combine into one month=1 row. total_rain
+        # is the cumulative sum of every qualifying reading in that bucket -
+        # i.e. the total rainfall recorded during that calendar month across
+        # the site's full history, not any single year's total.
         month = sa.extract("month", Reading.datetime).label("month")
         query = (
             db.session.query(
                 Reading.noise_site_id,
                 month,
                 sa.func.avg(Reading.rain_mm).label("avg_rain_mm"),
+                sa.func.sum(Reading.rain_mm).label("total_rain"),
                 sa.func.count(Reading.noise_site_id).label("sample_count"),
             )
             .filter(Reading.rain_mm.isnot(None))
@@ -116,6 +120,7 @@ class ReadingRepository:
                 "noise_site_id": row.noise_site_id,
                 "month": int(row.month),
                 "avg_rain_mm": float(row.avg_rain_mm),
+                "total_rain": float(row.total_rain),
                 "sample_count": row.sample_count,
             }
             for row in query.all()

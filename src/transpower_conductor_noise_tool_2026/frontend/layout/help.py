@@ -93,12 +93,12 @@ def content():
                 "Site Location",
                 [
                     "The Locations tab shows every site on a map. Click a marker to see that "
-                    "site's basic details, along with its wind rose and its average monthly "
+                    "site's basic details, along with its wind rose and its total monthly "
                     "rainfall chart below the map.",
-                    "The monthly rainfall chart shows one average figure per calendar month "
-                    "(January through December) calculated across that site's full weather "
-                    "history, so it reflects typical seasonal rainfall rather than any single "
-                    "year.",
+                    "The monthly rainfall chart shows one total figure per calendar month "
+                    "(January through December), summed across that site's full weather "
+                    "history - so it reflects how much rain has fallen in that month overall, "
+                    "not any single year's total.",
                 ],
             ),
         ]

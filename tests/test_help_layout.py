@@ -17,7 +17,7 @@ def test_content_describes_each_feature():
 
     assert "Updated 2026" in text
     assert "16 direction sectors" in text
-    assert "average monthly rainfall" in text
+    assert "total monthly rainfall" in text
 
 
 def test_detection_logic_table_has_the_expected_columns_and_rows():

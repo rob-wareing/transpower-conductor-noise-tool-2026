@@ -97,8 +97,10 @@ def test_aggregate_monthly_rainfall_groups_climatologically_across_years(tmp_pat
 
         assert rows[1]["sample_count"] == 2
         assert rows[1]["avg_rain_mm"] == 15.0
+        assert rows[1]["total_rain"] == 30.0
         assert rows[2]["sample_count"] == 1
         assert rows[2]["avg_rain_mm"] == 5.0
+        assert rows[2]["total_rain"] == 5.0
 
 
 def test_aggregate_monthly_rainfall_excludes_sentinel_and_null_values(tmp_path, monkeypatch):
@@ -115,3 +117,4 @@ def test_aggregate_monthly_rainfall_excludes_sentinel_and_null_values(tmp_path, 
         assert rows[0]["month"] == 3
         assert rows[0]["sample_count"] == 1
         assert rows[0]["avg_rain_mm"] == 2.0
+        assert rows[0]["total_rain"] == 2.0

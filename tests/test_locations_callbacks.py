@@ -249,8 +249,8 @@ def test_update_monthly_rainfall_shows_placeholder_when_nothing_clicked(fake_cli
 
 def test_update_monthly_rainfall_builds_bar_chart_from_backend_data(fake_client):
     fake_client.get_monthly_rainfall.return_value = [
-        MonthlyRainfall(month=1, avg_rain_mm=3.5, sample_count=20),
-        MonthlyRainfall(month=6, avg_rain_mm=8.0, sample_count=15),
+        MonthlyRainfall(month=1, avg_rain_mm=3.5, total_rain=35.0, sample_count=20),
+        MonthlyRainfall(month=6, avg_rain_mm=8.0, total_rain=120.0, sample_count=15),
     ]
     app = _build_app(fake_client)
 
@@ -265,8 +265,8 @@ def test_update_monthly_rainfall_builds_bar_chart_from_backend_data(fake_client)
     trace = figure["data"][0]
     assert trace["type"] == "bar"
     assert trace["x"] == locations_callbacks.MONTH_LABELS
-    assert trace["y"][0] == 3.5  # Jan
-    assert trace["y"][5] == 8.0  # Jun
+    assert trace["y"][0] == 35.0  # Jan
+    assert trace["y"][5] == 120.0  # Jun
     assert trace["y"][1] == 0  # Feb, zero-filled
 
 

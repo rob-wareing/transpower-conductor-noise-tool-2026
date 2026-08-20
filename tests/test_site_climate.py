@@ -60,6 +60,7 @@ def test_monthly_rainfall_endpoint_returns_populated_site_data(tmp_path, monkeyp
                 noise_site_id=KNOWN_SITE,
                 month=6,
                 avg_rain_mm=3.25,
+                total_rain=55.25,
                 sample_count=17,
                 computed_at=datetime(2026, 8, 4, 0, 0, 0),
             )
@@ -71,7 +72,12 @@ def test_monthly_rainfall_endpoint_returns_populated_site_data(tmp_path, monkeyp
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["count"] == 1
-    assert payload["items"][0] == {"month": 6, "avg_rain_mm": 3.25, "sample_count": 17}
+    assert payload["items"][0] == {
+        "month": 6,
+        "avg_rain_mm": 3.25,
+        "total_rain": 55.25,
+        "sample_count": 17,
+    }
 
 
 def test_monthly_rainfall_endpoint_returns_empty_items_for_site_with_no_data(tmp_path, monkeypatch):

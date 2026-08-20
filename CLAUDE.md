@@ -28,26 +28,26 @@ Working principle: frontend code should never import ORM models or ingestion mod
 ```text
 src/transpower_conductor_noise_tool_2026/
   backend/
-    api/            # Flask blueprint(s) + routes; auth_guard.py (require_write_access decorator); processed_reading_routes.py (PATCH is_wet/include); trends_routes.py (POST /api/trends/conductor-summary, /rain-rate-vs-level, /age-effects); site_climate_routes.py (GET /api/sites/<id>/wind-rose, /monthly-rainfall)
+    api/            # Flask blueprint(s) + routes; auth_guard.py (require_write_access decorator); processed_reading_routes.py (PATCH is_wet/include); trends_routes.py (POST /api/trends/conductor-summary, /rain-rate-vs-level, /age-effects); site_climate_routes.py (GET /api/sites/<id>/wind-rose, /monthly-rainfall); reconductoring_routes.py also serves GET /api/reconductoring/grease-descriptions
     domain/         # site_service.py, auth_service.py, chart_service.py (fully feature-complete vs. the old app - outage exclusion, bucketing, historical overlay (opt-in via ChartFilters.show_historical), conductor/treatment/grease filtering, days-since-conductoring mode, raw table rows), processing_service.py (pure Reading -> ProcessedReading pandas transform, "original" detection logic, real leq_rmse calculation from Leq900 data), processing_service_updated_2026.py ("Updated 2026" detection logic - new filter rules, run alongside the original), historical_service.py, processed_reading_service.py, site_climate_service.py (thin wind-rose/monthly-rainfall lookups for the Locations tab), trends_service.py (get_rain_rate_vs_level, get_conductor_summary, and get_age_effects are all real; compute_rain_rate_fits and compute_conductor_age_fits are the pure log-fit functions behind rain_rate_fit/conductor_age_fit)
     ingestion/      # nw_client.py (Noise and Weather API connector), ingestion_job.py (orchestrator), ingest_cli.py (entrypoint)
     persistence/
-      models/       # SQLAlchemy ORM models: Site (incl. is_ignored - excluded from queries/display everywhere except the Sites management tab), User, ProcessedReading (incl. reconductoring_age), Reading, Outage, OutageType, Reconductoring, HistoricalResult, ConductorSummary, RainRateFit, WindRose, MonthlyRainfall, ConductorAgeFit
-      repositories/ # repository-pattern data access - one per model, plus find_by_id/save/add/delete method shapes as each tab needed them; conductor_summary_repository.py, rain_rate_fit_repository.py, wind_rose_repository.py, monthly_rainfall_repository.py, and conductor_age_fit_repository.py are all delete-all-then-bulk-insert only (replace_all - the whole table is always fully regenerated, never patched incrementally); processed_reading_repository.py's list_readings uses a per-site window-function cap (per_site_limit, default 3,000 - see "Known gotchas" for why a flat LIMIT is wrong here) plus recalculate_reconductoring_ages (bulk, chunked); reading_repository.py has aggregate_wind_rose/aggregate_monthly_rainfall (set-based SQL GROUP BY, not pandas - reading is ~2.4M rows); reconductoring_repository.py has latest_by_site() (global, not scoped - see "Known gotchas")
+      models/       # SQLAlchemy ORM models: Site (incl. is_ignored - excluded from queries/display everywhere except the Sites management tab), User, ProcessedReading (incl. reconductoring_age), Reading, Outage, OutageType, Reconductoring, GreaseDescription (grease code -> human description, e.g. "C1.5" -> "1 layer of Al greased"), HistoricalResult, ConductorSummary, RainRateFit, WindRose, MonthlyRainfall, ConductorAgeFit
+      repositories/ # repository-pattern data access - one per model, plus find_by_id/save/add/delete method shapes as each tab needed them; conductor_summary_repository.py, rain_rate_fit_repository.py, wind_rose_repository.py, monthly_rainfall_repository.py, and conductor_age_fit_repository.py are all delete-all-then-bulk-insert only (replace_all - the whole table is always fully regenerated, never patched incrementally); processed_reading_repository.py's list_readings uses a per-site window-function cap (per_site_limit, default 3,000 via Settings.PER_SITE_READING_LIMIT - env-tunable, see "Known gotchas" for why a flat LIMIT is wrong here) plus recalculate_reconductoring_ages (bulk, chunked); reading_repository.py has aggregate_wind_rose/aggregate_monthly_rainfall (set-based SQL GROUP BY, not pandas - reading is ~2.4M rows); reconductoring_repository.py has latest_by_site() (global, not scoped - see "Known gotchas"); grease_description_repository.py is a plain hand-maintained lookup (list_all/add_all), not derived/regenerated like the replace_all tables above
       seed.py       # CSV-based demo data seeding
       seed_cli.py   # entrypoint used by db-migrate container
     app.py          # Flask app factory
-    config.py       # Settings incl. AUTO_INIT_DB / AUTO_SEED_DATA / SECRET_KEY / SESSION_COOKIE_SECURE / *_FIXTURE_PATH / NW_* flags; SQLALCHEMY_ENGINE_OPTIONS (pool_pre_ping, pool_recycle=280 - added after the OOM incident, see "Current status")
+    config.py       # Settings incl. AUTO_INIT_DB / AUTO_SEED_DATA / SECRET_KEY / SESSION_COOKIE_SECURE / *_FIXTURE_PATH / NW_* flags; SQLALCHEMY_ENGINE_OPTIONS (pool_pre_ping, pool_recycle=280 - added after the OOM incident, see "Current status"); PER_SITE_READING_LIMIT (default 3000, env-tunable cap consumed by ProcessedReadingRepository)
     extensions.py   # db = SQLAlchemy(); also enables SQLite FK enforcement (off by default in SQLite, on in the real MySQL deployment)
   frontend/
-    app.py          # Dash app factory (create_dashboard) + plain /login, /logout routes + dcc.Location auth gate + dbc.Tabs(Charts, Sites, Outages, Reconductoring, Historical, Trends, Locations) - all 7 old-app tabs; explicit assets_folder= (Dash's default inference would otherwise resolve to backend/assets, not frontend/assets); header is title (H1.display-6, "Conductor Noise Tool") + right-aligned username/Log-out block
+    app.py          # Dash app factory (create_dashboard) + plain /login, /logout routes + dcc.Location auth gate + dbc.Tabs(Charts, Sites, Outages, Reconductoring, Historical, Trends, Locations, Help) - the 7 old-app tabs plus a new static Help tab (no old-app equivalent); explicit assets_folder= (Dash's default inference would otherwise resolve to backend/assets, not frontend/assets); header is title (H1.display-6, "Conductor Noise Tool") + right-aligned username/Log-out block
     client.py       # BackendClient - HTTP wrapper the frontend uses instead of ORM
     assets/
       app_styles.css  # ported from the old app's application/static/css/app_styles.css - table/card styling, zebra stripes, editable-cell highlight CSS, fixed column widths, Dash auto-loads this via assets_folder
     callbacks/      # sites.py (incl. is_ignored 0/1 editable column), outages.py, reconductoring.py, historical.py (add/edit/delete via diff-against-server-truth on Save; all four also have a CSV export callback via dcc.Download, same in-memory pattern as Charts - no on-disk files); charts.py (conductor/grease option population, chart refresh incl. show_historical switch, raw-table refresh/save/PATCH gated on the table collapse being open, CSV export via dcc.Download); locations.py (builds the Scattermapbox figure client-side from GET /api/sites/detail; two more independent callbacks build a go.Barpolar wind rose and a go.Bar monthly-rainfall chart off the same map-click clickData); trends.py (all 3 sub-tabs - Conductor summary, Rain rate vs level, Age effects - each refresh a server-built figure via their own POST /api/trends/... route, same server-builds-the-figure pattern as Charts)
-    layout/         # sites.py (incl. is_ignored column), outages.py (dropdown-backed outage_type), reconductoring.py, historical.py, locations.py (dcc.Graph map + click-to-inspect info div + wind-rose/monthly-rainfall dcc.Graphs), trends.py (3 real sub-tabs: Rain rate vs level, Age effects, Conductor summary - no placeholders left); charts.py (site+date range / condition+parameter+aggregation+duration / conductor+grease / detection-logic+plot-by+show-historical filter rows, collapsible raw-data table, two dcc.Download components); table_styles.py (shared EDITABLE_CELL_HIGHLIGHT style_data_conditional) - every tab's buttons use dbc.Button with the old app's role-based color convention (secondary/success/primary); dbc.Switch is the pattern for new boolean toggles (show_historical) vs. the older dcc.Dropdown[True/False] pattern (include_dry) - both exist, no need to retrofit
+    layout/         # sites.py (incl. is_ignored column), outages.py (dropdown-backed outage_type), reconductoring.py, historical.py, locations.py (dcc.Graph map + click-to-inspect info div + wind-rose/monthly-rainfall dcc.Graphs), trends.py (3 real sub-tabs: Rain rate vs level, Age effects, Conductor summary - no placeholders left), help.py (static end-user help text, 4 subheadings, no callbacks); charts.py (site+date range / condition+parameter+aggregation+duration / conductor+grease / detection-logic+plot-by+show-historical filter rows, collapsible raw-data table, two dcc.Download components); table_styles.py (shared EDITABLE_CELL_HIGHLIGHT style_data_conditional) - every tab's buttons use dbc.Button with the old app's role-based color convention (secondary/success/primary); dbc.Switch is the pattern for new boolean toggles (show_historical) vs. the older dcc.Dropdown[True/False] pattern (include_dry) - both exist, no need to retrofit
   shared/
-    contracts.py    # Pydantic DTOs - Site* (incl. is_ignored), ChartFilters (incl. show_historical)/ChartsResponse/ChartTableRow/ChartTableResponse, ConductorSummaryFilters, RainRateVsLevelFilters, AgeEffectsFilters, WindRoseSector, MonthlyRainfall, UserSummary, Outage*, Reconductoring*, HistoricalResult*, ProcessedReadingUpdate
+    contracts.py    # Pydantic DTOs - Site* (incl. is_ignored), ChartFilters (incl. show_historical)/ChartsResponse/ChartTableRow/ChartTableResponse, ConductorSummaryFilters, RainRateVsLevelFilters, AgeEffectsFilters, WindRoseSector, MonthlyRainfall, GreaseDescription, UserSummary, Outage*, Reconductoring*, HistoricalResult*, ProcessedReadingUpdate
 alembic/
   env.py            # wired to real SQLAlchemy metadata, online mode works
   versions/         # 0001-0007: create site/user/processed_reading/reading/outage/reconductoring/historical_result tables
@@ -58,6 +58,7 @@ alembic/
                      # 0015: composite index on processed_reading(noise_site_id, datetime)  |  0016: site.is_ignored
                      # 0017: create wind_rose table  |  0018: create monthly_rainfall table
                      # 0019: processed_reading.reconductoring_age  |  0020: create conductor_age_fit table
+                     # 0021: create grease_description table (grease code -> human description lookup for the Charts tab's Grease dropdown)
                      # Every migration here mirrors the previous table's shape closely - see whichever's most similar before writing a new one from scratch.
 tests/
   test_health.py, test_sites.py, test_auth.py, test_charts.py, test_site_updates.py, test_outages.py,
@@ -66,11 +67,12 @@ tests/
   test_ingestion_job.py, test_trends.py              # full-Flask-app tests for ingestion and the Trends API routes (incl. age-effects)
   test_processed_reading_repository.py, test_conductor_summary_repository.py, test_rain_rate_fit_repository.py,
   test_wind_rose_repository.py, test_monthly_rainfall_repository.py, test_conductor_age_fit_repository.py,
-  test_reconductoring_repository.py, test_reading_repository_aggregation.py  # repository-level tests
+  test_reconductoring_repository.py, test_reading_repository_aggregation.py, test_grease_description_repository.py  # repository-level tests
   test_trends_service.py                             # trends_service.py pure-function tests (fake repositories, no DB)
   dash_callback_utils.py       # shared harness for driving Dash callbacks via /_dash-update-component in tests (no browser)
   test_charts_callbacks.py, test_sites_callbacks.py, test_outages_callbacks.py, test_reconductoring_callbacks.py,
-  test_historical_callbacks.py, test_locations_callbacks.py, test_trends_callbacks.py  # Dash-callback tests, all 7 tabs
+  test_historical_callbacks.py, test_locations_callbacks.py, test_trends_callbacks.py  # Dash-callback tests, all 7 old-app tabs
+  test_help_layout.py  # static-layout test - the Help tab has no callbacks, so this just asserts on content()'s rendered repr()
 docker-compose.yml   # db, db-migrate, web, ingest (profile: ingestion), optional nginx (profile: prodlike) - LOCAL DEV ONLY
 docker-compose.external-test.yml  # gitignored, local-only - points web/ingest at an external MySQL fork via -f
 docker-compose.prod.yml  # PRODUCTION: db-migrate/web/ingest pointed at DATABASE_URL from .env (the managed MySQL DB, no local `db` service); web's mem_limit/healthcheck added post-incident (see "Current status") - see DEPLOY.md
@@ -100,6 +102,7 @@ data/outage_type.csv          # fixed lookup values (monitoring, line) - matches
 data/outage.csv               # a few demo outage rows
 data/reconductoring.csv       # a few demo reconductoring-event rows (sites 51, 115 - neither's conductor_and_treatment matches the 6 known colour-coded types, see "Known gotchas")
 data/reconductoring_2026.csv  # real Grease/"SC proposed renaming" values, used once against the external fork, not part of the local demo seed
+data/grease_description.csv   # small hand-maintained lookup (3 rows: C1/C1.5/C2 -> human description), seeded like any other fixture, edited by hand when a new grease code appears
 data/historical_result.csv    # 154 rows ported from the old repo's real data, filtered to the sites in this repo's trimmed data/site.csv
 data/site_locations.csv       # real, manually-curated site coordinates ("Site ID,lon,lat" - a different shape from site.csv, which carries no coordinate columns), growing over time; source of truth for scripts/backfill_site_coordinates.py
 ```
@@ -109,7 +112,7 @@ Also machine-local, entirely outside this repo (one level up, provided by you): 
 
 ## Current status (as of 2026-08-05)
 
-The migration is functionally complete: all 7 of the old app's tabs exist and are feature-complete (no placeholders left, including Age effects), real ingestion has been verified against the live NW API and a real forked production database, the app is deployed and running on a real Digital Ocean Droplet (not just planned - see "Production incident" below), and 292 automated tests pass (194 backend, 98 frontend-callback).
+The migration is functionally complete: all 7 of the old app's tabs exist and are feature-complete (no placeholders left, including Age effects), real ingestion has been verified against the live NW API and a real forked production database, the app is deployed and running on a real Digital Ocean Droplet (not just planned - see "Production incident" below), and 298 automated tests pass (197 backend, 99 frontend-callback, 2 static-layout).
 
 ### Production incident and stabilization (2026-08-03/04)
 
@@ -124,9 +127,11 @@ Net effect: the same default page load that used to crash the whole Droplet now 
 
 **Auth** — Flask session-based login (`werkzeug.security` hashing, not the old app's hand-rolled cookie scheme). `write_access` enforced **server-side** on every write endpoint via `@require_write_access` — a real security fix over the old app, whose gating was client-side only.
 
-**Charts tab** — fully feature-complete vs. the old app: per-site line chart + data-availability timeline, weekly-aggregation bucketing, historical-data overlay (splices in `HistoricalResult` up to each site's survey cutover date, gated behind the "Show historical" switch (`ChartFilters.show_historical`, default `False` — the overlay is opt-in, not shown by default)), conductor/treatment/grease filters, days-since-conductoring plot mode, `append_outages()` window exclusion, collapsible editable raw-data table (`is_wet`/`include`), in-memory CSV export (`dcc.Download`, no on-disk files — the old app's download mechanism had a confirmed path-mismatch bug). `measurement_duration_minutes` (1 or 15 min) and `detection_logic` (`original`/`updated_2026`) filters are both wired to real filtering.
+**Charts tab** — fully feature-complete vs. the old app: per-site line chart + data-availability timeline, weekly-aggregation bucketing, historical-data overlay (splices in `HistoricalResult` up to each site's survey cutover date, gated behind the "Show historical" switch (`ChartFilters.show_historical`, default `False` — the overlay is opt-in, not shown by default)), conductor/treatment/grease filters, days-since-conductoring plot mode, `append_outages()` window exclusion, collapsible editable raw-data table (`is_wet`/`include`), in-memory CSV export (`dcc.Download`, no on-disk files — the old app's download mechanism had a confirmed path-mismatch bug). `measurement_duration_minutes` (1 or 15 min) and `detection_logic` (`original`/`updated_2026`) filters are both wired to real filtering. The Grease dropdown's options are labelled `"{code} - {description}"` (e.g. `"C1.5 - 1 layer of Al greased"`) by looking up each site-scoped grease code against the small `grease_description` lookup table (`GET /api/reconductoring/grease-descriptions`) — the dropdown's `value` sent in `ChartFilters.grease` is still the bare code, only the on-screen label changes; a code with no matching row (e.g. demo-seed values) falls back to the bare code as its label.
 
 **Sites / Outages / Reconductoring / Historical tabs** — Sites is edit-only (matches the old app; no add/delete flow, new sites only arrive via `data/site.csv`). Outages/Reconductoring/Historical are genuinely add/edit/delete-capable via per-row REST endpoints, with the **frontend** diffing the submitted table against server state to decide what to call (a deliberate divergence from the old app's single generic bulk-sync callback). All 5 tabs with tabular data have in-memory CSV export.
+
+**Help tab** — new, no old-app equivalent. Fully static (`frontend/layout/help.py::content()`, no callbacks, no backend calls, no `register_callbacks` entry needed), four subheadings: Detection Logic, Historical Data, Wind Roses, Site Location - plain-language explanations of those four features for end users, kept in sync by hand with the actual filter/toggle/chart behavior each describes (there's no automated check that the prose matches the code - if one of those four features' behavior changes, update this tab's copy too).
 
 **Locations tab** — real per-site map (`Site.latitude`/`longitude`), built from `GET /api/sites/detail`; a deliberate improvement over the old app's 5-hardcoded-dummy-point stub. Read-only, no write callback (matches old app). Clicking a site marker also populates a wind rose (`go.Barpolar`, 16 compass sectors) and a climatological average-monthly-rainfall bar chart, both read from the raw `reading` table via two materialized tables (`wind_rose`, `monthly_rainfall`) precomputed by `scripts/generate_wind_rose.py`/`generate_monthly_rainfall.py` (set-based SQL `GROUP BY` via `ReadingRepository.aggregate_wind_rose`/`aggregate_monthly_rainfall`, not pandas — `reading` is ~2.4M rows, too large to pull wholesale) and regenerated weekly via cron (`DEPLOY.md` "Weekly derived-table regeneration"). Sentinel/invalid raw values (`wind_speed >= 200`, `rain_mm >= 99` — reading's ingestion-time cap-invalid convention, see `processing_service.MAX_VALID_WIND_SPEED`/`MAX_VALID_RAIN_FALL`) are excluded from both aggregations.
 
@@ -137,18 +142,18 @@ Net effect: the same default page load that used to crash the whole Droplet now 
 - **Rain rate vs level** — real, populated. Scatter of the selected metric against `rain1`, one coloured trace per site, reading raw `processed_reading` rows directly (no materialized table). Filters: detection_logic, metric, site multi-select (default all), "Include dry" toggle (default `False` — dry/`is_wet=0` points excluded by default). Each site with a stored `rain_rate_fit` row also gets a dashed logarithmic best-fit line (`metric = slope*ln(rain1) + intercept`) in the same colour as that site's markers — the fit itself is **precomputed** (`trends_service.compute_rain_rate_fits` + `scripts/generate_rain_rate_fits.py`, one row per site × detection_logic × metric in the `rain_rate_fit` table, fit over wet/included/`rain1>0` rows, skipped if <3 qualifying points) and only looked up at request time, never refit per chart request/filter change.
 - **Age effects** — real, populated. Scatter of the selected metric against `processed_reading.reconductoring_age` (days since each site's most recent reconductoring event - see `scripts/calculate_reconductoring_age.py`/`ProcessedReadingRepository.recalculate_reconductoring_ages`, NULL for rows that predate a site's current conductor or for sites with no reconductoring history, and such rows are excluded from the chart entirely, not just from the fit), one coloured trace per site, reading raw `processed_reading` rows directly (no materialized table for the scatter itself). Filters: detection_logic, metric, site multi-select (default all) - same structure as Rain rate vs level, minus its "Include dry" toggle (not relevant here). Each site with a stored `conductor_age_fit` row also gets a dashed logarithmic best-fit line (`metric = slope*ln(reconductoring_age) + intercept`), same colour as that site's markers - precomputed (`trends_service.compute_conductor_age_fits` + `scripts/generate_conductor_age_fits.py`, one row per site × detection_logic × metric, fit over included rows with `reconductoring_age > 0` - log undefined at 0 - skipped if <3 qualifying points) and only looked up at request time, mirroring Rain rate vs level's own fit-lookup pattern exactly.
 
-**Production database (the same "external MySQL fork" used for pre-launch testing)** — the managed MySQL instance the live Droplet's `docker-compose.prod.yml` points `DATABASE_URL` at is the same real forked production database referenced elsewhere in this file as "the external fork" — it was used for pre-launch testing and then became production for real once the Droplet went live, they are not two different databases. Schema is fully in sync through migration `0020` (every column/table applied there via direct `ALTER TABLE`/`CREATE TABLE`, run by you — see "How to run against the external fork" for why, and "Production incident" above for why several of 0015-0020 exist). Real data loaded/computed there: ~1.64M real `leq_rmse` values, a 137,044-row `updated_2026` backfill, a 54-row `conductor_summary`, a 162-row `rain_rate_fit`, a 260,281-row `processed_reading.reconductoring_age` recalculation (184,002 aged, 76,279 NULL), a 153-row `conductor_age_fit`, a 464-row `wind_rose`, and a 297-row `monthly_rainfall` (all generated 2026-08-03 through 2026-08-05 via the matching `scripts/generate_*.py`/`calculate_*.py`).
+**Production database (the same "external MySQL fork" used for pre-launch testing)** — the managed MySQL instance the live Droplet's `docker-compose.prod.yml` points `DATABASE_URL` at is the same real forked production database referenced elsewhere in this file as "the external fork" — it was used for pre-launch testing and then became production for real once the Droplet went live, they are not two different databases. Schema is fully in sync through migration `0021` (every column/table applied there via direct `ALTER TABLE`/`CREATE TABLE`, run by you — see "How to run against the external fork" for why, and "Production incident" above for why several of 0015-0020 exist). Real data loaded/computed there: ~1.64M real `leq_rmse` values, a 137,044-row `updated_2026` backfill, a 54-row `conductor_summary`, a 162-row `rain_rate_fit`, a 260,281-row `processed_reading.reconductoring_age` recalculation (184,002 aged, 76,279 NULL), a 153-row `conductor_age_fit`, a 464-row `wind_rose`, a 297-row `monthly_rainfall` (all generated 2026-08-03 through 2026-08-05 via the matching `scripts/generate_*.py`/`calculate_*.py`), and a 3-row `grease_description` (C1/C1.5/C2, hand-inserted 2026-08-06). `web` has been rebuilt and redeployed against this schema (`docker compose -f docker-compose.prod.yml build web && up -d web`), confirmed serving `/api/reconductoring/grease-descriptions` live.
 
-**Tests** — 292 passing: 194 backend (full-Flask-app tests, pure-function tests, a mocked-HTTP-boundary test, repository-level tests), 98 Dash-callback tests (all 7 tabs, via `tests/dash_callback_utils.py` driving the real `/app/_dash-update-component` endpoint — Dash callbacks are closures with no importable name, so this is the only way to exercise the actual registered callback rather than a hand-copied stand-in).
+**Tests** — 298 passing: 197 backend (full-Flask-app tests, pure-function tests, a mocked-HTTP-boundary test, repository-level tests), 99 Dash-callback tests (all 7 old-app tabs, via `tests/dash_callback_utils.py` driving the real `/app/_dash-update-component` endpoint — Dash callbacks are closures with no importable name, so this is the only way to exercise the actual registered callback rather than a hand-copied stand-in), 2 static-layout tests (`test_help_layout.py` — the Help tab has no callbacks to drive, so these just assert on the rendered component tree's `repr()`).
 
 **Production deployment** — `DEPLOY.md` is a full step-by-step guide for a Digital Ocean Droplet (Ubuntu 24.04): host setup (ufw, Docker, nginx, certbot), `docker-compose.prod.yml` (points `db-migrate`/`web`/`ingest` at the existing managed MySQL DB via `DATABASE_URL` in `.env` — no local `db` container in prod), TLS via host nginx + Let's Encrypt (not a dockerized nginx — simpler cert renewal via certbot's own systemd timer), daily cron jobs (`ingest` → `generate_conductor_summary.py` → `generate_rain_rate_fits.py` → `calculate_reconductoring_age.py` → `generate_conductor_age_fits.py`, staggered 2:00am-3:05am) and weekly cron jobs (`generate_wind_rose.py`, `generate_monthly_rainfall.py`, Sunday 3:30/3:45am), all wrapped in the shared `cron/run.sh` `flock`-guarded logging script, plus `cron/watchdog.sh` (memory/OOM early warning, "9b"). **Actually provisioned and running** — this is the same Droplet the "Production incident" section above describes; it has survived a real OOM crash + fix cycle and is currently serving real traffic. The watchdog cron entry and the swap file were added by hand during the incident and aren't yet reflected as a fresh-Droplet setup step in `DEPLOY.md`'s main flow — see "Outstanding issues".
 
 ### Outstanding issues
 - **The Droplet is dual-use (production host + interactive dev box)** — VS Code Remote-SSH + Claude Code CLI processes were observed consuming ~1.3GB+ of the Droplet's 1.9GB total RAM during the incident, directly reducing the headroom that would otherwise have absorbed the app's memory spike. Flagged to the user as a longer-term recommendation (a separate dev Droplet) but not acted on — still true today.
-- **The watchdog cron entry (`cron/watchdog.sh`, DEPLOY.md "9b") and the 2GB swap file were added by hand mid-incident**, not via a repeatable setup step — `DEPLOY.md`'s main flow should be updated so a *fresh* Droplet setup provisions both from the start, rather than only documenting them as something added after a crash.
+- ~~The watchdog cron entry and the 2GB swap file were added by hand mid-incident, not via a repeatable setup step~~ — **resolved**: `DEPLOY.md` now has a "2a. Swap file" step (fallocate/mkswap/swapon/fstab) ahead of "9b. Memory/OOM watchdog" (which already had real setup commands), so a fresh Droplet setup provisions both from the start.
 - **`site.is_ignored` is currently set on 4 real sites** (179, 203, 205, and `-1`) by the user directly against production, flagged during the incident as sites that "should not be called or displayed." Not further investigated *why* each was flagged — treat as intentional unless told otherwise.
 - **`noise_site_id = -1` ("Transpower - Millcreek South") is a likely data-quality duplicate** of real sites 205/209 (both also named "Transpower - Millcreek South") — noticed during the incident investigation, not root-caused or fixed. It's one of the 4 currently-ignored sites above, which papers over the symptom without explaining it.
-- **`ProcessedReadingRepository.list_readings`'s `per_site_limit` (default 3,000/site) is a safety cap, not a considered per-tab UX decision** — every consumer (Charts, Trends/Rain-rate-vs-level, Trends/Age-effects) now silently truncates to each site's 3,000 most-recent qualifying rows once a site has more history than that. Works fine today; revisit the constant (or make it per-endpoint-configurable) if a site's real history grows enough that 3,000 rows starts feeling short for trend analysis.
+- **`ProcessedReadingRepository.list_readings`'s `per_site_limit` (default 3,000/site) is a safety cap, not a considered per-tab UX decision** — every consumer (Charts, Trends/Rain-rate-vs-level, Trends/Age-effects) silently truncates to each site's most-recent qualifying rows once a site has more history than the cap. It's still a single global cap shared by all three consumers (no per-endpoint tuning), but it's now operator-tunable without a code change via the `PER_SITE_READING_LIMIT` env var (`config.py`'s `Settings.PER_SITE_READING_LIMIT`, wired into `docker-compose.yml`/`docker-compose.prod.yml`'s `web` service and documented in `.env.example`) — raise it there and restart `web` if 3,000 rows starts feeling short.
 - **Locations tab** — `go.Scattermapbox` is deprecated by the installed Plotly version (cosmetic warning only); a swap to `go.Scattermap` hasn't been done.
 - **Site coordinates on the fork** — 29 of 35 real sites have real `latitude`/`longitude` (backfilled 2026-08-03 from `data/site_locations.csv` via `scripts/backfill_site_coordinates.py`). 6 real sites still have no entry in `data/site_locations.csv` and remain uncoordinated; add them there and re-run the script (safe/idempotent) as more real coordinates become available.
 - **No scheduling for the `ingest` service locally** — `docker-compose.yml` (local dev) only supports a manually-triggered one-shot, matching the old app. `DEPLOY.md`'s production Droplet setup has real cron scheduling for everything (see "Production deployment" above) — but that's Droplet-only, not something a local `docker compose up` gets.
@@ -267,6 +272,9 @@ curl http://localhost:5001/api/outages
 curl -b /tmp/cookies.txt -X POST http://localhost:5001/api/outages -H "Content-Type: application/json" \
   -d '{"noise_site_id":51,"outage_type":"monitoring","start_datetime":"2025-01-01T00:00:00","end_datetime":"2025-01-01T01:00:00"}'
 
+# Grease code -> human description lookup, backing the Charts tab's Grease dropdown labels
+curl http://localhost:5001/api/reconductoring/grease-descriptions
+
 # Ingestion (opt-in, needs real NW_USERNAME/NW_PASSWORD - never run automatically):
 NW_USERNAME=... NW_PASSWORD=... docker compose --profile ingestion run --rm ingest
 
@@ -319,7 +327,7 @@ python scripts/generate_conductor_age_fits.py --dry-run  # re-run any time recon
 docker compose -f docker-compose.yml -f docker-compose.external-test.yml down
 ```
 
-**Fork schema is fully in sync through migration `0013`** — every column/table this repo's migrations have added is applied there too, via direct SQL (never this repo's own Alembic — see "Known gotchas" for why), run by you:
+**Fork schema is fully in sync through migration `0021`** — every column/table this repo's migrations have added is applied there too, via direct SQL (never this repo's own Alembic — see "Known gotchas" for why), run by you:
 ```sql
 ALTER TABLE reading ADD COLUMN measurement_duration_minutes INT NOT NULL DEFAULT 15;
 ALTER TABLE processed_reading ADD COLUMN measurement_duration_minutes INT NOT NULL DEFAULT 15;
@@ -348,13 +356,13 @@ CREATE TABLE rain_rate_fit (
 );
 -- after creating the table, populate it: python scripts/generate_rain_rate_fits.py --dry-run, then for real
 
--- migration 0015, NOT YET applied to the fork (full DDL: alembic/versions/0015_add_processed_reading_site_datetime_index.py):
+-- migration 0015, already applied to the fork (full DDL: alembic/versions/0015_add_processed_reading_site_datetime_index.py):
 CREATE INDEX ix_processed_reading_site_datetime ON processed_reading (noise_site_id, datetime);
 
--- migration 0016, NOT YET applied to the fork (full DDL: alembic/versions/0016_add_site_is_ignored.py):
+-- migration 0016, already applied to the fork (full DDL: alembic/versions/0016_add_site_is_ignored.py):
 ALTER TABLE site ADD COLUMN is_ignored TINYINT(1) NOT NULL DEFAULT 0;
 
--- migration 0017, NOT YET applied to the fork (full DDL: alembic/versions/0017_create_wind_rose.py):
+-- migration 0017, already applied to the fork (full DDL: alembic/versions/0017_create_wind_rose.py):
 CREATE TABLE wind_rose (
     noise_site_id INT NOT NULL,
     direction_sector VARCHAR(3) NOT NULL,
@@ -367,7 +375,7 @@ CREATE TABLE wind_rose (
 );
 -- after creating the table, populate it: python scripts/generate_wind_rose.py --dry-run, then for real
 
--- migration 0018, NOT YET applied to the fork (full DDL: alembic/versions/0018_create_monthly_rainfall.py):
+-- migration 0018, already applied to the fork (full DDL: alembic/versions/0018_create_monthly_rainfall.py):
 CREATE TABLE monthly_rainfall (
     noise_site_id INT NOT NULL,
     month INT NOT NULL,
@@ -380,11 +388,11 @@ CREATE TABLE monthly_rainfall (
 );
 -- after creating the table, populate it: python scripts/generate_monthly_rainfall.py --dry-run, then for real
 
--- migration 0019, NOT YET applied to the fork (full DDL: alembic/versions/0019_add_processed_reading_reconductoring_age.py):
+-- migration 0019, already applied to the fork (full DDL: alembic/versions/0019_add_processed_reading_reconductoring_age.py):
 ALTER TABLE processed_reading ADD COLUMN reconductoring_age INT NULL;
 -- after adding the column, populate it: python scripts/calculate_reconductoring_age.py
 
--- migration 0020, NOT YET applied to the fork (full DDL: alembic/versions/0020_create_conductor_age_fit.py):
+-- migration 0020, already applied to the fork (full DDL: alembic/versions/0020_create_conductor_age_fit.py):
 CREATE TABLE conductor_age_fit (
     noise_site_id INT NOT NULL,
     detection_logic VARCHAR(20) NOT NULL,
@@ -399,6 +407,21 @@ CREATE TABLE conductor_age_fit (
         REFERENCES site (noise_site_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 -- after creating the table (and after reconductoring_age is populated), run: python scripts/generate_conductor_age_fits.py --dry-run, then for real
+
+-- migration 0021, already applied to the fork (full DDL: alembic/versions/0021_create_grease_description.py):
+CREATE TABLE grease_description (
+    grease VARCHAR(20) NOT NULL,
+    description VARCHAR(255) NOT NULL,
+    PRIMARY KEY (grease)
+);
+INSERT INTO grease_description (grease, description) VALUES
+    ('C1', 'Steel core greased only'),
+    ('C1.5', '1 layer of Al greased'),
+    ('C2', 'Fully greased');
+-- no generation script needed - this is a small hand-maintained lookup table, not a
+-- derived/materialized one. Add a new row by hand (INSERT ... ON DUPLICATE KEY UPDATE
+-- description = VALUES(description) to also cover editing an existing code's wording)
+-- whenever a reconductoring event introduces a new grease code.
 ```
 If a future migration adds another column/table, add its equivalent statement here and run it the same way (single multi-clause `ALTER TABLE` for any PK change — see "Known gotchas").
 

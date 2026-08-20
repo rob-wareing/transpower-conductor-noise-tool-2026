@@ -14,6 +14,7 @@ from .callbacks.sites import register_callbacks as register_site_callbacks
 from .callbacks.trends import register_callbacks as register_trends_callbacks
 from .client import BackendClient
 from .layout import charts as charts_layout
+from .layout import help as help_layout
 from .layout import historical as historical_layout
 from .layout import locations as locations_layout
 from .layout import outages as outages_layout
@@ -129,6 +130,7 @@ def create_dashboard(server=None, backend_url=None):
                 ),
                 dbc.Tab(trends_layout.content(), label="Trends", tab_id="trends"),
                 dbc.Tab(locations_layout.content(), label="Locations", tab_id="locations"),
+                dbc.Tab(help_layout.content(), label="Help", tab_id="help"),
             ],
             active_tab="charts",
         )

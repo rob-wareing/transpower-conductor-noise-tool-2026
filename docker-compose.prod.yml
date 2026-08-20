@@ -36,6 +36,7 @@ services:
       - OUTAGE_FIXTURE_PATH=/app/data/outage.csv
       - RECONDUCTORING_FIXTURE_PATH=/app/data/reconductoring.csv
       - HISTORICAL_RESULT_FIXTURE_PATH=/app/data/historical_result.csv
+      - GREASE_DESCRIPTION_FIXTURE_PATH=/app/data/grease_description.csv
       - AUTO_INIT_DB=false
       - AUTO_SEED_DATA=false
     volumes:
@@ -69,8 +70,10 @@ services:
       - OUTAGE_FIXTURE_PATH=/app/data/outage.csv
       - RECONDUCTORING_FIXTURE_PATH=/app/data/reconductoring.csv
       - HISTORICAL_RESULT_FIXTURE_PATH=/app/data/historical_result.csv
+      - GREASE_DESCRIPTION_FIXTURE_PATH=/app/data/grease_description.csv
       - AUTO_INIT_DB=false
       - AUTO_SEED_DATA=false
+      - PER_SITE_READING_LIMIT=${PER_SITE_READING_LIMIT:-3000}
     volumes:
       - ./data:/app/data
       - ./ca-certificate.crt:/app/ca-certificate.crt:ro

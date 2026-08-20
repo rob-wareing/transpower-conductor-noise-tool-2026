@@ -29,6 +29,22 @@ def test_reconductoring_endpoint_returns_seeded_rows(tmp_path, monkeypatch):
     )
 
 
+def test_grease_descriptions_endpoint_returns_seeded_rows(tmp_path, monkeypatch):
+    _app, client = _make_client(tmp_path, monkeypatch)
+
+    response = client.get("/api/reconductoring/grease-descriptions")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["count"] == 3
+    by_grease = {item["grease"]: item["description"] for item in payload["items"]}
+    assert by_grease == {
+        "C1": "Steel core greased only",
+        "C1.5": "1 layer of Al greased",
+        "C2": "Fully greased",
+    }
+
+
 def test_create_reconductoring_event_requires_authentication(tmp_path, monkeypatch):
     _app, client = _make_client(tmp_path, monkeypatch)
 

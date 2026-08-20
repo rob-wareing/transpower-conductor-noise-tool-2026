@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import bindparam, func
 from sqlalchemy.orm import aliased
 
+from transpower_conductor_noise_tool_2026.backend.config import Settings
 from transpower_conductor_noise_tool_2026.backend.extensions import db
 from transpower_conductor_noise_tool_2026.backend.persistence.models.processed_reading import (
     ProcessedReading,
@@ -21,7 +22,10 @@ class ProcessedReadingRepository:
     # not a random/fair truncation. per_site_limit instead caps each site
     # independently (keeping its most recent rows), so every site with data
     # is guaranteed some representation regardless of total row volume.
-    DEFAULT_PER_SITE_LIMIT = 3_000
+    # Tunable without a code change via the PER_SITE_READING_LIMIT env var
+    # (see config.py) - e.g. raise it if a site's real history outgrows what
+    # feels like enough for trend analysis.
+    DEFAULT_PER_SITE_LIMIT = Settings.PER_SITE_READING_LIMIT
 
     def list_readings(
         self,

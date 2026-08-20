@@ -1,5 +1,6 @@
 from transpower_conductor_noise_tool_2026.backend.app import create_app
 from transpower_conductor_noise_tool_2026.backend.persistence.seed import (
+    seed_grease_descriptions_from_csv,
     seed_historical_results_from_csv,
     seed_outage_types_from_csv,
     seed_outages_from_csv,
@@ -38,6 +39,10 @@ def main():
             app.config["HISTORICAL_RESULT_FIXTURE_PATH"]
         )
         print(f"seeded_historical_results={inserted_historical_results}")
+        inserted_grease_descriptions = seed_grease_descriptions_from_csv(
+            app.config["GREASE_DESCRIPTION_FIXTURE_PATH"]
+        )
+        print(f"seeded_grease_descriptions={inserted_grease_descriptions}")
 
 
 if __name__ == "__main__":

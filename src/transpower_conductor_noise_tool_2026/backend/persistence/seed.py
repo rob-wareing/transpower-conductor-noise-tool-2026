@@ -4,6 +4,9 @@ import pandas as pd
 
 from transpower_conductor_noise_tool_2026.backend.domain.auth_service import hash_password
 from transpower_conductor_noise_tool_2026.backend.extensions import db
+from transpower_conductor_noise_tool_2026.backend.persistence.models.grease_description import (
+    GreaseDescription,
+)
 from transpower_conductor_noise_tool_2026.backend.persistence.models.historical_result import (
     HistoricalResult,
 )
@@ -166,6 +169,26 @@ def seed_historical_results_from_csv(csv_path: Path):
                 period_end_date=record["period_end_date"].date(),
                 leq_adj=_clean_optional_value(record.get("leq_adj")),
                 tone_100hz=_clean_optional_value(record.get("tone_100hz")),
+            )
+        )
+
+    db.session.commit()
+    return len(df)
+
+
+def seed_grease_descriptions_from_csv(csv_path: Path):
+    if not csv_path.exists():
+        return 0
+
+    if GreaseDescription.query.count():
+        return 0
+
+    df = pd.read_csv(csv_path)
+    for record in df.to_dict("records"):
+        db.session.add(
+            GreaseDescription(
+                grease=str(record["grease"]),
+                description=str(record["description"]),
             )
         )
 

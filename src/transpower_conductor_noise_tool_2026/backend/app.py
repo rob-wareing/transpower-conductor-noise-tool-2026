@@ -6,6 +6,7 @@ from transpower_conductor_noise_tool_2026.backend.config import DEFAULT_DB_PATH,
 from transpower_conductor_noise_tool_2026.backend.extensions import db
 from transpower_conductor_noise_tool_2026.backend.persistence import models  # noqa: F401
 from transpower_conductor_noise_tool_2026.backend.persistence.seed import (
+    seed_grease_descriptions_from_csv,
     seed_historical_results_from_csv,
     seed_outage_types_from_csv,
     seed_outages_from_csv,
@@ -61,6 +62,7 @@ def create_app(test_config=None):
             seed_outages_from_csv(app.config["OUTAGE_FIXTURE_PATH"])
             seed_reconductoring_from_csv(app.config["RECONDUCTORING_FIXTURE_PATH"])
             seed_historical_results_from_csv(app.config["HISTORICAL_RESULT_FIXTURE_PATH"])
+            seed_grease_descriptions_from_csv(app.config["GREASE_DESCRIPTION_FIXTURE_PATH"])
 
     @app.get("/health")
     def health():

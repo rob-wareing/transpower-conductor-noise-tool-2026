@@ -286,6 +286,13 @@ class ReconductoringUpdate(BaseModel):
     notes: str | None = None
 
 
+class GreaseDescription(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    grease: str
+    description: str
+
+
 class HistoricalResultDetail(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,10 +1,14 @@
 from transpower_conductor_noise_tool_2026.backend.persistence.models.reconductoring import (
     Reconductoring,
 )
+from transpower_conductor_noise_tool_2026.backend.persistence.repositories.grease_description_repository import (
+    GreaseDescriptionRepository,
+)
 from transpower_conductor_noise_tool_2026.backend.persistence.repositories.reconductoring_repository import (
     ReconductoringRepository,
 )
 from transpower_conductor_noise_tool_2026.shared.contracts import (
+    GreaseDescription,
     ReconductoringCreate,
     ReconductoringDetail,
     ReconductoringUpdate,
@@ -16,6 +20,13 @@ def list_reconductoring_events(
 ) -> list[ReconductoringDetail]:
     repository = repository or ReconductoringRepository()
     return [ReconductoringDetail.model_validate(event) for event in repository.list_events()]
+
+
+def list_grease_descriptions(
+    repository: GreaseDescriptionRepository | None = None,
+) -> list[GreaseDescription]:
+    repository = repository or GreaseDescriptionRepository()
+    return [GreaseDescription.model_validate(row) for row in repository.list_all()]
 
 
 def create_reconductoring_event(

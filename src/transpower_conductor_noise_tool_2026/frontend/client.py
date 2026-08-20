@@ -7,6 +7,7 @@ from transpower_conductor_noise_tool_2026.shared.contracts import (
     ChartFilters,
     ChartTableRow,
     ConductorSummaryFilters,
+    GreaseDescription,
     HistoricalResultCreate,
     HistoricalResultDetail,
     HistoricalResultUpdate,
@@ -170,6 +171,11 @@ class BackendClient:
         response = requests.get(f"{self.base_url}/api/reconductoring", timeout=10)
         response.raise_for_status()
         return [ReconductoringDetail.model_validate(item) for item in response.json()["items"]]
+
+    def get_grease_descriptions(self):
+        response = requests.get(f"{self.base_url}/api/reconductoring/grease-descriptions", timeout=10)
+        response.raise_for_status()
+        return [GreaseDescription.model_validate(item) for item in response.json()["items"]]
 
     def create_reconductoring_event(self, data: ReconductoringCreate, cookies):
         return requests.post(

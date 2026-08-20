@@ -1,5 +1,6 @@
 from .conductor_age_fit import ConductorAgeFit
 from .conductor_summary import ConductorSummary
+from .grease_description import GreaseDescription
 from .historical_result import HistoricalResult
 from .monthly_rainfall import MonthlyRainfall
 from .outage import Outage

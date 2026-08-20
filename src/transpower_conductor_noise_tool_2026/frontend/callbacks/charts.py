@@ -60,6 +60,11 @@ def register_callbacks(dash_app, backend_url: str | None):
             return [], []
         events = client.get_reconductoring_events()
         options = _conductor_options(events, site_ids, "grease")
+        descriptions = {item.grease: item.description for item in client.get_grease_descriptions()}
+        for option in options:
+            description = descriptions.get(option["value"])
+            if description:
+                option["label"] = f"{option['value']} - {description}"
         valid_values = {option["value"] for option in options}
         kept = [value for value in (current_value or []) if value in valid_values]
         return options, kept

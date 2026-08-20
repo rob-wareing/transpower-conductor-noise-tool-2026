@@ -38,6 +38,22 @@ sudo apt install -y nginx python3-certbot-nginx
 
 Add your deploy user to the `docker` group so you don't need `sudo` for every `docker compose` call: `sudo usermod -aG docker $USER` (log out/in to pick it up).
 
+## 2a. Swap file
+
+Most Droplet sizes in the "at least 2GB RAM" range above still have little to no headroom once MySQL client libraries, gunicorn workers, and an interactive SSH/VS Code session are all running at once. A 2GB swap file gives the kernel somewhere to fall back to during a memory spike, long enough for the `web` container's own `mem_limit`/cgroup OOM-kill (`docker-compose.prod.yml`) or the watchdog (step 9b) to catch it — instead of the kernel's own OOM-killer taking out unrelated host processes (sshd, VS Code Remote-SSH) the way it did in a real incident on this app (see `CLAUDE.md`'s "Production incident and stabilization").
+
+```bash
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+sudo sysctl vm.swappiness=10
+echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
+```
+
+Verify with `free -h` — `Swap:` should show `2.0Gi` total. The `/etc/fstab` line makes it survive a reboot.
+
 ## 3. Transfer the app
 
 ```bash
@@ -194,7 +210,7 @@ Sunday 3:30am. These read `reading` directly, so they only need the 2am `ingest`
 
 ## 9b. Memory/OOM watchdog
 
-The Droplet has no swap and (before the `mem_limit` added to `docker-compose.prod.yml`) no cgroup memory boundary on the `web` container, so a runaway query could exhaust host RAM and let the kernel OOM killer take out unrelated host processes (sshd, VS Code Remote-SSH) — not just the app. `cron/watchdog.sh` is a cheap early-warning check: it logs a warning line to `/var/log/conductor-noise/watchdog.log` whenever available memory drops below 300MB, the kernel has logged an OOM/SIGKILL event in the last 5 minutes, or `conductor_noise_2026_web`'s gunicorn worker was SIGKILLed in the last 5 minutes.
+Before the swap file (step 2a) and the `mem_limit` added to `docker-compose.prod.yml`, this Droplet had no swap and no cgroup memory boundary on the `web` container, so a runaway query could exhaust host RAM and let the kernel OOM killer take out unrelated host processes (sshd, VS Code Remote-SSH) — not just the app. Both are now part of the standard setup flow above, but a slow memory leak or a query that grows faster than expected could still exhaust the swap+cgroup headroom, so `cron/watchdog.sh` is a cheap early-warning check on top of them: it logs a warning line to `/var/log/conductor-noise/watchdog.log` whenever available memory drops below 300MB, the kernel has logged an OOM/SIGKILL event in the last 5 minutes, or `conductor_noise_2026_web`'s gunicorn worker was SIGKILLed in the last 5 minutes.
 
 ```bash
 chmod +x /opt/transpower-conductor-noise-tool-2026/cron/watchdog.sh

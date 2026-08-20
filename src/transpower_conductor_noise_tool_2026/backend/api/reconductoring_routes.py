@@ -5,6 +5,7 @@ from transpower_conductor_noise_tool_2026.backend.api.auth_guard import require_
 from transpower_conductor_noise_tool_2026.backend.domain.reconductoring_service import (
     create_reconductoring_event,
     delete_reconductoring_event,
+    list_grease_descriptions,
     list_reconductoring_events,
     update_reconductoring_event,
 )
@@ -20,6 +21,12 @@ bp = Blueprint("reconductoring", __name__, url_prefix="/api/reconductoring")
 @bp.get("")
 def reconductoring():
     items = [event.model_dump(mode="json") for event in list_reconductoring_events()]
+    return jsonify({"items": items, "count": len(items)})
+
+
+@bp.get("/grease-descriptions")
+def grease_descriptions():
+    items = [g.model_dump(mode="json") for g in list_grease_descriptions()]
     return jsonify({"items": items, "count": len(items)})
 
 

@@ -8,6 +8,7 @@ from transpower_conductor_noise_tool_2026.frontend.client import BackendClient
 from transpower_conductor_noise_tool_2026.frontend.layout import charts as charts_layout
 from transpower_conductor_noise_tool_2026.shared.contracts import (
     ChartTableRow,
+    GreaseDescription,
     ReconductoringDetail,
     SiteSummary,
 )
@@ -171,6 +172,7 @@ def test_populate_conductor_treatment_options_drops_stale_selected_value(fake_cl
 
 def test_populate_grease_options_uses_grease_field(fake_client):
     fake_client.get_reconductoring_events.return_value = _events()
+    fake_client.get_grease_descriptions.return_value = []
     app = _build_app(fake_client)
 
     response = dispatch_callback(
@@ -182,6 +184,25 @@ def test_populate_grease_options_uses_grease_field(fake_client):
 
     assert output_value(response, "chart-grease", "options") == [
         {"label": "synthetic", "value": "synthetic"}
+    ]
+
+
+def test_populate_grease_options_appends_description_when_available(fake_client):
+    fake_client.get_reconductoring_events.return_value = _events()
+    fake_client.get_grease_descriptions.return_value = [
+        GreaseDescription(grease="synthetic", description="Synthetic grease blend"),
+    ]
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("chart-grease", "options"), ("chart-grease", "value")],
+        inputs=[("chart-site-select", "value", [52])],
+        state=[("chart-grease", "value", [])],
+    )
+
+    assert output_value(response, "chart-grease", "options") == [
+        {"label": "synthetic - Synthetic grease blend", "value": "synthetic"}
     ]
 
 

@@ -68,6 +68,46 @@ def test_populate_site_options_returns_empty_when_no_backend():
     assert output_value(response, "chart-site-select", "options") == []
 
 
+# --- bulk_select_sites ---------------------------------------------------
+
+
+def test_bulk_select_sites_select_all_returns_every_option_value(fake_client):
+    app = _build_app(fake_client)
+    options = [
+        {"label": "(51) Demo Site", "value": 51},
+        {"label": "(137) Other Site", "value": 137},
+    ]
+
+    response = dispatch_callback(
+        app,
+        outputs=[("chart-site-select", "value")],
+        inputs=[
+            ("chart-select-all-sites-button", "n_clicks", 1),
+            ("chart-clear-sites-button", "n_clicks", 0),
+        ],
+        state=[("chart-site-select", "options", options)],
+    )
+
+    assert output_value(response, "chart-site-select", "value") == [51, 137]
+
+
+def test_bulk_select_sites_clear_returns_empty_list(fake_client):
+    app = _build_app(fake_client)
+    options = [{"label": "(51) Demo Site", "value": 51}]
+
+    response = dispatch_callback(
+        app,
+        outputs=[("chart-site-select", "value")],
+        inputs=[
+            ("chart-clear-sites-button", "n_clicks", 1),
+            ("chart-select-all-sites-button", "n_clicks", 0),
+        ],
+        state=[("chart-site-select", "options", options)],
+    )
+
+    assert output_value(response, "chart-site-select", "value") == []
+
+
 # --- populate_reconductoring_events_store / populate_conductor_treatment_options / populate_grease_options ----
 
 
@@ -716,3 +756,12 @@ def test_export_chart_plot_builds_csv_from_plain_list_trace_data(fake_client):
     assert "Site 51" in payload["content"]
     assert "48.1" in payload["content"]
     assert "49.3" in payload["content"]
+
+
+# --- layout: Sites box width + chip wrapping ------------------------------
+
+
+def test_sites_box_dropdown_has_the_wide_chip_wrap_class():
+    text = repr(charts_layout.content())
+
+    assert "chart-site-select-wide" in text

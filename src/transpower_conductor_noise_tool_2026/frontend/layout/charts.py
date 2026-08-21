@@ -78,148 +78,209 @@ def content(write_access: bool = False):
             dcc.Store(id="chart-reconductoring-events-store"),
             html.Div(
                 [
-                    # Row 1: Sites, Date range
+                    # Left column: all the other selection criteria, stacked.
                     html.Div(
                         [
+                            # Row 1: Date range
                             html.Div(
                                 [
-                                    html.Label("Sites"),
-                                    dcc.Dropdown(id="chart-site-select", multi=True),
+                                    html.Div(
+                                        [
+                                            html.Label("Date range"),
+                                            dcc.DatePickerRange(id="chart-date-range"),
+                                        ]
+                                    ),
                                 ],
-                                style={"minWidth": "500px", "maxWidth": "900px"},
+                                style={"display": "flex", "flexWrap": "wrap", "gap": "1rem", "marginBottom": "1rem"},
                             ),
+                            # Row 2: Condition, Parameter
                             html.Div(
                                 [
-                                    html.Label("Date range"),
-                                    dcc.DatePickerRange(id="chart-date-range"),
+                                    html.Div(
+                                        [
+                                            html.Label("Condition"),
+                                            dcc.Dropdown(
+                                                id="chart-condition",
+                                                options=CONDITION_OPTIONS,
+                                                value="all",
+                                            ),
+                                        ],
+                                        style={"minWidth": "150px"},
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Label("Parameter"),
+                                            dcc.Dropdown(
+                                                id="chart-parameter",
+                                                options=PARAMETER_OPTIONS,
+                                                value="tone_100hz",
+                                            ),
+                                        ],
+                                        style={"minWidth": "180px"},
+                                    ),
+                                ],
+                                style={"display": "flex", "flexWrap": "wrap", "gap": "1rem", "marginBottom": "1rem"},
+                            ),
+                            # Row 2b: Aggregation period, Measurement duration
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.Label("Aggregation period"),
+                                            dcc.Dropdown(
+                                                id="chart-interval-weeks",
+                                                options=INTERVAL_WEEKS_OPTIONS,
+                                                value=2,
+                                                clearable=False,
+                                            ),
+                                        ],
+                                        style={"minWidth": "160px"},
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Label("Measurement duration"),
+                                            dcc.Dropdown(
+                                                id="chart-measurement-duration",
+                                                options=MEASUREMENT_DURATION_OPTIONS,
+                                                value="15min",
+                                                clearable=False,
+                                            ),
+                                        ],
+                                        style={"minWidth": "180px"},
+                                    ),
+                                ],
+                                style={"display": "flex", "flexWrap": "wrap", "gap": "1rem", "marginBottom": "1rem"},
+                            ),
+                            # Row 3: Conductor and treatment
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.Label("Conductor and treatment"),
+                                            dcc.Dropdown(
+                                                id="chart-conductor-treatment",
+                                                options=[],
+                                                value=[],
+                                                multi=True,
+                                                placeholder="All",
+                                            ),
+                                        ],
+                                        style={"minWidth": "400px", "maxWidth": "700px"},
+                                    ),
+                                ],
+                                style={"display": "flex", "flexWrap": "wrap", "gap": "1rem", "marginBottom": "1rem"},
+                            ),
+                            # Row 3b: Grease
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.Label("Grease"),
+                                            dcc.Dropdown(
+                                                id="chart-grease",
+                                                options=[],
+                                                value=[],
+                                                multi=True,
+                                                placeholder="All",
+                                            ),
+                                        ],
+                                        style={"minWidth": "350px", "maxWidth": "600px"},
+                                    ),
+                                ],
+                                style={"display": "flex", "flexWrap": "wrap", "gap": "1rem", "marginBottom": "1rem"},
+                            ),
+                            # Row 4: Detection logic, Plot by
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.Label("Detection logic"),
+                                            dcc.Dropdown(
+                                                id="chart-detection-logic",
+                                                options=DETECTION_LOGIC_OPTIONS,
+                                            ),
+                                        ],
+                                        style={"minWidth": "220px"},
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Label("Plot by"),
+                                            dcc.RadioItems(
+                                                id="chart-plot-by",
+                                                options=PLOT_BY_OPTIONS,
+                                                value="datetime",
+                                            ),
+                                        ],
+                                        style={"minWidth": "220px"},
+                                    ),
+                                    html.Div(
+                                        [
+                                            dbc.Switch(
+                                                id="chart-show-historical",
+                                                label="Show historical",
+                                                value=False,
+                                            ),
+                                        ],
+                                        style={"minWidth": "180px", "alignSelf": "flex-end"},
+                                    ),
+                                ],
+                                style={"display": "flex", "flexWrap": "wrap", "gap": "1rem", "marginBottom": "1rem"},
+                            ),
+                        ],
+                        style={"flex": "1", "minWidth": "0"},
+                    ),
+                    # Right column: Sites, in its own box - a dedicated
+                    # dropdown-with-bulk-select box rather than inline with
+                    # the other filters, since site selection is usually the
+                    # first/most-used filter and benefits from more room.
+                    dbc.Card(
+                        [
+                            dbc.CardHeader("Sites"),
+                            dbc.CardBody(
+                                [
+                                    dcc.Dropdown(
+                                        id="chart-site-select",
+                                        multi=True,
+                                        className="chart-site-select-wide",
+                                    ),
+                                    html.Div(
+                                        [
+                                            dbc.Button(
+                                                "Select all",
+                                                id="chart-select-all-sites-button",
+                                                color="secondary",
+                                                size="sm",
+                                                n_clicks=0,
+                                            ),
+                                            dbc.Button(
+                                                "Clear",
+                                                id="chart-clear-sites-button",
+                                                color="secondary",
+                                                outline=True,
+                                                size="sm",
+                                                n_clicks=0,
+                                            ),
+                                        ],
+                                        style={"display": "flex", "gap": "0.5rem", "marginTop": "0.75rem"},
+                                    ),
                                 ]
                             ),
                         ],
-                        style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
-                    ),
-                    # Row 2: Condition, Parameter, Aggregation period
-                    html.Div(
-                        [
-                            html.Div(
-                                [
-                                    html.Label("Condition"),
-                                    dcc.Dropdown(
-                                        id="chart-condition",
-                                        options=CONDITION_OPTIONS,
-                                        value="all",
-                                    ),
-                                ],
-                                style={"minWidth": "150px"},
-                            ),
-                            html.Div(
-                                [
-                                    html.Label("Parameter"),
-                                    dcc.Dropdown(
-                                        id="chart-parameter",
-                                        options=PARAMETER_OPTIONS,
-                                        value="tone_100hz",
-                                    ),
-                                ],
-                                style={"minWidth": "180px"},
-                            ),
-                            html.Div(
-                                [
-                                    html.Label("Aggregation period"),
-                                    dcc.Dropdown(
-                                        id="chart-interval-weeks",
-                                        options=INTERVAL_WEEKS_OPTIONS,
-                                        value=2,
-                                        clearable=False,
-                                    ),
-                                ],
-                                style={"minWidth": "160px"},
-                            ),
-                            html.Div(
-                                [
-                                    html.Label("Measurement duration"),
-                                    dcc.Dropdown(
-                                        id="chart-measurement-duration",
-                                        options=MEASUREMENT_DURATION_OPTIONS,
-                                        value="15min",
-                                        clearable=False,
-                                    ),
-                                ],
-                                style={"minWidth": "180px"},
-                            ),
-                        ],
-                        style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
-                    ),
-                    # Row 3: Conductor and treatment, Grease
-                    html.Div(
-                        [
-                            html.Div(
-                                [
-                                    html.Label("Conductor and treatment"),
-                                    dcc.Dropdown(
-                                        id="chart-conductor-treatment",
-                                        options=[],
-                                        value=[],
-                                        multi=True,
-                                        placeholder="All",
-                                    ),
-                                ],
-                                style={"minWidth": "400px", "maxWidth": "700px"},
-                            ),
-                            html.Div(
-                                [
-                                    html.Label("Grease"),
-                                    dcc.Dropdown(
-                                        id="chart-grease",
-                                        options=[],
-                                        value=[],
-                                        multi=True,
-                                        placeholder="All",
-                                    ),
-                                ],
-                                style={"minWidth": "350px", "maxWidth": "600px"},
-                            ),
-                        ],
-                        style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
-                    ),
-                    # Row 4: Detection logic, Plot by
-                    html.Div(
-                        [
-                            html.Div(
-                                [
-                                    html.Label("Detection logic"),
-                                    dcc.Dropdown(
-                                        id="chart-detection-logic",
-                                        options=DETECTION_LOGIC_OPTIONS,
-                                    ),
-                                ],
-                                style={"minWidth": "220px"},
-                            ),
-                            html.Div(
-                                [
-                                    html.Label("Plot by"),
-                                    dcc.RadioItems(
-                                        id="chart-plot-by",
-                                        options=PLOT_BY_OPTIONS,
-                                        value="datetime",
-                                    ),
-                                ],
-                                style={"minWidth": "220px"},
-                            ),
-                            html.Div(
-                                [
-                                    dbc.Switch(
-                                        id="chart-show-historical",
-                                        label="Show historical",
-                                        value=False,
-                                    ),
-                                ],
-                                style={"minWidth": "180px", "alignSelf": "flex-end"},
-                            ),
-                        ],
-                        style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
+                        style={
+                            "minWidth": "600px",
+                            "maxWidth": "650px",
+                            "minHeight": "500px",
+                            "flex": "1",
+                        },
                     ),
                 ],
-                style={"marginBottom": "1rem"},
+                style={
+                    "display": "flex",
+                    "flexWrap": "wrap",
+                    "gap": "1rem",
+                    "marginBottom": "1rem",
+                    "alignItems": "flex-start",
+                },
             ),
             html.Div(
                 dbc.Button(

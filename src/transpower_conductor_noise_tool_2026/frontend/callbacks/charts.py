@@ -1,3 +1,4 @@
+import dash
 import flask
 import pandas as pd
 from dash import Input, Output, State, dcc, html, no_update
@@ -35,6 +36,23 @@ def register_callbacks(dash_app, backend_url: str | None):
             {"label": f"({site.noise_site_id}) {site.site_name}", "value": site.noise_site_id}
             for site in client.get_sites()
         ]
+
+    @dash_app.callback(
+        Output("chart-site-select", "value"),
+        Input("chart-select-all-sites-button", "n_clicks"),
+        Input("chart-clear-sites-button", "n_clicks"),
+        State("chart-site-select", "options"),
+        prevent_initial_call=True,
+    )
+    def bulk_select_sites(_select_all_clicks, _clear_clicks, options):
+        # One click selects every currently-listed site (or clears the
+        # selection) instead of clicking each site in the dropdown
+        # individually. Only fires on an actual button click
+        # (prevent_initial_call=True) - manual per-site selection in the
+        # dropdown itself is untouched by this callback.
+        if dash.ctx.triggered_id == "chart-select-all-sites-button":
+            return [option["value"] for option in options or []]
+        return []
 
     @dash_app.callback(
         Output("chart-reconductoring-events-store", "data"),

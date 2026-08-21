@@ -281,3 +281,19 @@ td[data-dash-column="height_adj_db"], th[data-dash-column="height_adj_db"] {
 td[data-dash-column="leq_adj"], th[data-dash-column="leq_adj"] {
     width: 140px;
 }
+
+
+/* Charts tab: Sites multi-select - let selected-site tags flow left-to-right
+   and wrap onto the next row only once a row is actually full, instead of
+   whatever narrower default wrapping a cramped container would force. */
+
+.chart-site-select-wide .Select-multi-value-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.chart-site-select-wide .Select-value {
+    float: none;
+    margin: 0;
+}

@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 
+from transpower_conductor_noise_tool_2026.backend.config import Settings
 from transpower_conductor_noise_tool_2026.backend.persistence.repositories.historical_result_repository import (
     HistoricalResultRepository,
 )
@@ -505,6 +506,10 @@ def _fetch_filtered_readings_dataframe(
             is_wet=is_wet,
             measurement_duration_minutes=filters.measurement_duration,
             detection_logic=filters.detection_logic,
+            # Charts gets its own, much higher per-site cap than the
+            # repository's own default (used by Trends) - see
+            # Settings.CHARTS_PER_SITE_LIMIT.
+            per_site_limit=Settings.CHARTS_PER_SITE_LIMIT,
         )
         if site_ids
         else []

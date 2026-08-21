@@ -67,4 +67,13 @@ class Settings:
     INGEST_SITE_IDS = _env_int_list("INGEST_SITE_IDS")
     # Per-site cap on ProcessedReadingRepository.list_readings - see that
     # method's own comment for why this must be per-site, not a flat LIMIT.
+    # Default cap for Trends (Rain-rate-vs-level, Age-effects).
     PER_SITE_READING_LIMIT = int(os.environ.get("PER_SITE_READING_LIMIT", "3000"))
+    # A much higher per-site cap used only by the Charts tab (figures + raw
+    # table) - Charts is expected to show a site's full history, not a
+    # trend-analysis sample, but still needs *some* hard backstop rather than
+    # a genuinely unbounded query (see chart_service.py's OOM-incident
+    # history). 100,000/site is comfortably above every real site's current
+    # row count (~50k for the largest, per reading_availability) while still
+    # bounding a single request's worst case.
+    CHARTS_PER_SITE_LIMIT = int(os.environ.get("CHARTS_PER_SITE_LIMIT", "100000"))

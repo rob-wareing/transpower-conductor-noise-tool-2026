@@ -212,8 +212,10 @@ def test_charts_endpoint_includes_pre_2020_processed_readings_by_default(tmp_pat
             ProcessedReading,
         )
 
-        # Site 137 has no baseline seeded rows (see AUTO_SEED_DATA gotcha in
-        # CLAUDE.md) - an isolated fixture for this pre-2020 date.
+        # Site 137 does carry AUTO_SEED_DATA baseline rows (all dated 2025,
+        # like every seedable site's - see CLAUDE.md's gotcha), but none of
+        # them predate 2020, so this added row is unambiguously the only
+        # 2018-dated one.
         db.session.add(
             ProcessedReading(
                 noise_site_id=137,
@@ -234,6 +236,60 @@ def test_charts_endpoint_includes_pre_2020_processed_readings_by_default(tmp_pat
     assert response.status_code == 200
     dates = [item["datetime"] for item in response.get_json()["items"]]
     assert any(str(d).startswith("2018") for d in dates)
+
+
+def test_charts_endpoint_uses_its_own_much_higher_per_site_cap(tmp_path, monkeypatch):
+    from datetime import datetime
+
+    from transpower_conductor_noise_tool_2026.backend.persistence.models.processed_reading import (
+        ProcessedReading,
+    )
+
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    with app.app_context():
+        # Every seedable site (data/site.csv) already carries some baseline
+        # processed_reading rows (see AUTO_SEED_DATA gotcha - not just
+        # 51/115), all dated 2025 - so these 10 rows are dated 2030,
+        # unambiguously the most recent regardless of whatever baseline data
+        # site 137 also has.
+        for day in range(1, 11):
+            db.session.add(
+                ProcessedReading(
+                    noise_site_id=137,
+                    datetime=datetime(2030, 1, day),
+                    l90=40.0,
+                    tone_100hz=1.0,
+                    tone_200hz=1.0,
+                    rain1=0.0,
+                    rain2=0.0,
+                    is_wet=False,
+                    include=True,
+                )
+            )
+        db.session.commit()
+
+    # Charts' own cap (CHARTS_PER_SITE_LIMIT, far above these 10 rows plus
+    # whatever baseline data exists) keeps every one of these 10 rows.
+    response = client.post("/api/charts/table", json={"noise_site_id": [137]})
+    dates = {item["datetime"] for item in response.get_json()["items"]}
+    assert {f"2030-01-{day:02d}T00:00:00" for day in range(1, 11)} <= dates
+
+    # Configuring Charts' cap down to less than the row count truncates to
+    # that many most-recent rows - proving chart_service reads
+    # Settings.CHARTS_PER_SITE_LIMIT (not the repository's own
+    # PER_SITE_READING_LIMIT-derived default) on every request, not just once
+    # at import time.
+    from transpower_conductor_noise_tool_2026.backend.config import Settings
+
+    monkeypatch.setattr(Settings, "CHARTS_PER_SITE_LIMIT", 3)
+    capped_response = client.post("/api/charts/table", json={"noise_site_id": [137]})
+    capped_items = capped_response.get_json()["items"]
+    assert len(capped_items) == 3
+    assert {item["datetime"] for item in capped_items} == {
+        "2030-01-08T00:00:00",
+        "2030-01-09T00:00:00",
+        "2030-01-10T00:00:00",
+    }
 
 
 def test_charts_endpoint_hides_historical_results_by_default(tmp_path, monkeypatch):

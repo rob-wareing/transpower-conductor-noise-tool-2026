@@ -1,6 +1,7 @@
 import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
 
+from .table_columns_config import visible_column_defs
 from .table_styles import EDITABLE_CELL_HIGHLIGHT, LEFT_ALIGN_HEADER
 
 COLUMN_DEFS = [
@@ -14,7 +15,7 @@ COLUMN_DEFS = [
 def content(write_access: bool = False):
     columns = [
         {"name": name, "id": col_id, "type": col_type, "editable": write_access}
-        for name, col_id, col_type in COLUMN_DEFS
+        for name, col_id, col_type in visible_column_defs("historical", COLUMN_DEFS)
     ]
 
     button_style = {} if write_access else {"display": "none"}

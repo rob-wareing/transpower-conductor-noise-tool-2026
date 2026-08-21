@@ -10,7 +10,15 @@ from transpower_conductor_noise_tool_2026.shared.contracts import (
 
 from ..client import BackendClient
 
-EDITABLE_FIELDS = ["noise_site_id", "conductor_and_treatment", "grease", "reconductoring_date", "notes"]
+# Core fields, used to build the create/update payload and to detect a
+# still-blank unsaved new row. for_reconductoring_age is handled separately
+# (see add_row/save_reconductoring below) - it's a boolean flag, always
+# truthy by default, so including it in the generic "row.get(field) or None"
+# treatment would both wrongly null it out on a falsy (0/False) value and
+# break the "is this new row still blank" check (a boolean defaulting True
+# would make every new row look non-blank).
+CORE_EDITABLE_FIELDS = ["noise_site_id", "conductor_and_treatment", "grease", "reconductoring_date", "notes"]
+EDITABLE_FIELDS = CORE_EDITABLE_FIELDS + ["for_reconductoring_age"]
 
 
 def register_callbacks(dash_app, backend_url: str | None):
@@ -24,7 +32,12 @@ def register_callbacks(dash_app, backend_url: str | None):
     def refresh_reconductoring_table(_n_intervals, _status):
         if client is None:
             return []
-        return [event.model_dump(mode="json") for event in client.get_reconductoring_events()]
+        rows = []
+        for event in client.get_reconductoring_events():
+            row = event.model_dump(mode="json")
+            row["for_reconductoring_age"] = int(row["for_reconductoring_age"])  # numeric column, 0/1
+            rows.append(row)
+        return rows
 
     @dash_app.callback(
         Output("reconductoring-table", "data", allow_duplicate=True),
@@ -35,7 +48,9 @@ def register_callbacks(dash_app, backend_url: str | None):
     def add_row(n_clicks, rows):
         if not n_clicks:
             return rows
-        return rows + [{field: "" for field in EDITABLE_FIELDS}]
+        new_row = {field: "" for field in CORE_EDITABLE_FIELDS}
+        new_row["for_reconductoring_age"] = 1  # matches the column's DB default
+        return rows + [new_row]
 
     @dash_app.callback(
         Output("reconductoring-status", "children"),
@@ -59,11 +74,14 @@ def register_callbacks(dash_app, backend_url: str | None):
                 errors.append(f"delete event {event_id}: {response.json().get('error')}")
 
         for row in rows:
-            fields = {field: row.get(field) or None for field in EDITABLE_FIELDS}
+            fields = {field: row.get(field) or None for field in CORE_EDITABLE_FIELDS}
+            for_reconductoring_age = bool(row.get("for_reconductoring_age", True))
 
             if row.get("id"):
                 try:
-                    update = ReconductoringUpdate(**fields)
+                    update = ReconductoringUpdate(
+                        **fields, for_reconductoring_age=for_reconductoring_age
+                    )
                 except ValidationError as exc:
                     errors.append(f"event {row['id']}: {exc.errors()[0]['msg']}")
                     continue
@@ -76,7 +94,7 @@ def register_callbacks(dash_app, backend_url: str | None):
                 continue  # blank unsaved new row - silently skipped, matches old app
 
             try:
-                data = ReconductoringCreate(**fields)
+                data = ReconductoringCreate(**fields, for_reconductoring_age=for_reconductoring_age)
             except ValidationError as exc:
                 errors.append(f"new event: {exc.errors()[0]['msg']}")
                 continue

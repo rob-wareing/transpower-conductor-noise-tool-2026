@@ -152,3 +152,27 @@ def test_recalculate_reconductoring_ages_nulls_sites_with_no_cutoff(tmp_path, mo
 
         db.session.expire_all()
         assert db.session.get(ProcessedReading, reading_id).reconductoring_age is None
+
+
+def test_aggregate_availability_returns_full_history_per_site_unbounded_by_cap(tmp_path, monkeypatch):
+    other_site = 137  # from data/site.csv, no baseline seeded rows
+    app = _make_app(tmp_path, monkeypatch)
+    with app.app_context():
+        db.session.add(_reading(datetime(2018, 1, 1), include=True))  # KNOWN_SITE
+        db.session.add(_reading(datetime(2025, 6, 1), include=True))  # KNOWN_SITE
+        other = _reading(datetime(2022, 3, 1), include=True)
+        other.noise_site_id = other_site
+        db.session.add(other)
+        db.session.commit()
+
+        rows = {row["noise_site_id"]: row for row in ProcessedReadingRepository().aggregate_availability()}
+
+        # AUTO_SEED_DATA's baseline demo rows (all dated 2025, see CLAUDE.md's
+        # AUTO_SEED_DATA gotcha) are seeded across many sites, not just 51/115
+        # - so row_count isn't asserted here, only min/max, which are
+        # unambiguous since 2018 predates and 2025-06-01 postdates every
+        # baseline row regardless of which sites it landed on.
+        assert rows[KNOWN_SITE]["min_datetime"] == datetime(2018, 1, 1)
+        assert rows[KNOWN_SITE]["max_datetime"] == datetime(2025, 6, 1)
+        assert rows[other_site]["min_datetime"] <= datetime(2022, 3, 1)
+        assert rows[other_site]["max_datetime"] >= datetime(2022, 3, 1)

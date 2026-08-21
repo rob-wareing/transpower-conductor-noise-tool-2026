@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
 from transpower_conductor_noise_tool_2026.backend.domain.chart_service import (
+    get_availability_timeline,
     get_chart_figures,
     get_chart_table_rows,
 )
@@ -17,8 +18,15 @@ def charts():
     except ValidationError as exc:
         return jsonify({"error": exc.errors(include_context=False)}), 400
 
-    noise_chart, timeline_chart = get_chart_figures(filters)
-    return jsonify({"noise_chart": noise_chart, "timeline_chart": timeline_chart})
+    noise_chart = get_chart_figures(filters)
+    return jsonify({"noise_chart": noise_chart})
+
+
+@bp.get("/charts/timeline")
+def charts_timeline():
+    # No request body/filters - deliberately decoupled from every Charts tab
+    # option, see chart_service.get_availability_timeline.
+    return jsonify({"timeline_chart": get_availability_timeline()})
 
 
 @bp.post("/charts/table")

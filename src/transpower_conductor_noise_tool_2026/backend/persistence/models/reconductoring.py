@@ -1,3 +1,5 @@
+import sqlalchemy as sa
+
 from transpower_conductor_noise_tool_2026.backend.extensions import db
 
 
@@ -17,6 +19,15 @@ class Reconductoring(db.Model):
     reconductoring_date = db.Column(db.Date, nullable=False)
     plot_linestyle = db.Column(db.String(20), nullable=True)
     notes = db.Column(db.String(200), nullable=True)
+    # Whether this event should anchor ReconductoringRepository.latest_by_site()
+    # (and therefore processed_reading.reconductoring_age) - not every logged
+    # row is a genuine new-conductor event, some are just a grease/treatment
+    # change on the same physical conductor. Defaults True (unlike
+    # site.is_ignored's False default) so adding this column changes nothing
+    # until a specific row is deliberately flagged as not a real reconductoring.
+    for_reconductoring_age = db.Column(
+        db.Boolean, nullable=False, default=True, server_default=sa.true()
+    )
 
     __table_args__ = (
         db.ForeignKeyConstraint(

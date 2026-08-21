@@ -22,7 +22,7 @@ def _login(client, email="demo@transpower.example", password="demo-password"):
     assert response.status_code == 200
 
 
-def test_charts_endpoint_returns_both_figures(tmp_path, monkeypatch):
+def test_charts_endpoint_returns_noise_chart(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
 
     response = client.post("/api/charts", json={})
@@ -31,33 +31,16 @@ def test_charts_endpoint_returns_both_figures(tmp_path, monkeypatch):
     payload = response.get_json()
     assert "data" in payload["noise_chart"]
     assert "layout" in payload["noise_chart"]
-    assert "data" in payload["timeline_chart"]
-    assert "layout" in payload["timeline_chart"]
-    assert len(payload["timeline_chart"]["data"]) > 0
+    assert "timeline_chart" not in payload  # moved to GET /api/charts/timeline
 
 
-def test_charts_endpoint_filters_by_site(tmp_path, monkeypatch):
-    client = _make_client(tmp_path, monkeypatch)
-
-    all_sites_response = client.post("/api/charts", json={})
-    single_site_response = client.post("/api/charts", json={"noise_site_id": [51]})
-
-    all_sites_bars = len(all_sites_response.get_json()["timeline_chart"]["data"])
-    single_site_bars = len(single_site_response.get_json()["timeline_chart"]["data"])
-
-    assert single_site_bars == 1
-    assert single_site_bars < all_sites_bars
-
-
-def test_charts_endpoint_with_no_matching_data_returns_empty_figures(tmp_path, monkeypatch):
+def test_charts_endpoint_with_no_matching_data_returns_empty_figure(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
 
     response = client.post("/api/charts", json={"noise_site_id": [999999]})
 
     assert response.status_code == 200
-    payload = response.get_json()
-    assert payload["noise_chart"]["data"] == []
-    assert payload["timeline_chart"]["data"] == []
+    assert response.get_json()["noise_chart"]["data"] == []
 
 
 def test_charts_endpoint_excludes_ignored_site_even_when_explicitly_requested(tmp_path, monkeypatch):
@@ -73,9 +56,104 @@ def test_charts_endpoint_excludes_ignored_site_even_when_explicitly_requested(tm
     response = client.post("/api/charts", json={"noise_site_id": [51]})
 
     assert response.status_code == 200
-    payload = response.get_json()
-    assert payload["noise_chart"]["data"] == []
-    assert payload["timeline_chart"]["data"] == []
+    assert response.get_json()["noise_chart"]["data"] == []
+
+
+# --- GET /api/charts/timeline (decoupled from every Charts tab option) -----
+
+
+def test_charts_timeline_endpoint_returns_empty_when_no_availability_data(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.get("/api/charts/timeline")
+
+    assert response.status_code == 200
+    assert response.get_json()["timeline_chart"]["data"] == []
+
+
+def test_charts_timeline_endpoint_returns_a_bar_per_precomputed_site(tmp_path, monkeypatch):
+    from datetime import datetime
+
+    from transpower_conductor_noise_tool_2026.backend.persistence.models.reading_availability import (
+        ReadingAvailability,
+    )
+
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    with app.app_context():
+        db.session.add(
+            ReadingAvailability(
+                noise_site_id=51,
+                min_datetime=datetime(2018, 1, 1),
+                max_datetime=datetime(2025, 1, 1),
+                row_count=100,
+                computed_at=datetime(2026, 8, 22),
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/charts/timeline")
+
+    assert response.status_code == 200
+    payload = response.get_json()["timeline_chart"]
+    assert len(payload["data"]) == 1
+    assert payload["data"][0]["x"][0] == "2018-01-01T00:00:00"
+
+
+def test_charts_timeline_endpoint_excludes_ignored_sites(tmp_path, monkeypatch):
+    from datetime import datetime
+
+    from transpower_conductor_noise_tool_2026.backend.persistence.models.reading_availability import (
+        ReadingAvailability,
+    )
+
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    with app.app_context():
+        site = Site.query.filter_by(noise_site_id=51).first()
+        site.is_ignored = True
+        db.session.add(
+            ReadingAvailability(
+                noise_site_id=51,
+                min_datetime=datetime(2018, 1, 1),
+                max_datetime=datetime(2025, 1, 1),
+                row_count=100,
+                computed_at=datetime(2026, 8, 22),
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/charts/timeline")
+
+    assert response.status_code == 200
+    assert response.get_json()["timeline_chart"]["data"] == []
+
+
+def test_charts_timeline_endpoint_unaffected_by_query_params(tmp_path, monkeypatch):
+    # No filters are accepted at all - a plain GET is the only shape. This
+    # confirms the endpoint doesn't silently read/act on stray query params
+    # a stale client might still send.
+    from datetime import datetime
+
+    from transpower_conductor_noise_tool_2026.backend.persistence.models.reading_availability import (
+        ReadingAvailability,
+    )
+
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    with app.app_context():
+        db.session.add(
+            ReadingAvailability(
+                noise_site_id=51,
+                min_datetime=datetime(2018, 1, 1),
+                max_datetime=datetime(2025, 1, 1),
+                row_count=100,
+                computed_at=datetime(2026, 8, 22),
+            )
+        )
+        db.session.commit()
+
+    plain = client.get("/api/charts/timeline").get_json()
+    with_params = client.get("/api/charts/timeline?noise_site_id=999999&start_date=2025-01-01").get_json()
+
+    assert plain == with_params
 
 
 def test_charts_endpoint_rejects_invalid_payload(tmp_path, monkeypatch):
@@ -123,6 +201,39 @@ def test_charts_endpoint_wider_interval_produces_fewer_or_equal_buckets(tmp_path
     four_weeks = client.post("/api/charts", json={"noise_site_id": [51], "interval_weeks": 4})
 
     assert _noise_chart_point_count(four_weeks) <= _noise_chart_point_count(one_week)
+
+
+def test_charts_endpoint_includes_pre_2020_processed_readings_by_default(tmp_path, monkeypatch):
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    with app.app_context():
+        from datetime import datetime
+
+        from transpower_conductor_noise_tool_2026.backend.persistence.models.processed_reading import (
+            ProcessedReading,
+        )
+
+        # Site 137 has no baseline seeded rows (see AUTO_SEED_DATA gotcha in
+        # CLAUDE.md) - an isolated fixture for this pre-2020 date.
+        db.session.add(
+            ProcessedReading(
+                noise_site_id=137,
+                datetime=datetime(2018, 6, 1),
+                l90=40.0,
+                tone_100hz=1.0,
+                tone_200hz=1.0,
+                rain1=0.0,
+                rain2=0.0,
+                is_wet=False,
+                include=True,
+            )
+        )
+        db.session.commit()
+
+    response = client.post("/api/charts/table", json={"noise_site_id": [137]})
+
+    assert response.status_code == 200
+    dates = [item["datetime"] for item in response.get_json()["items"]]
+    assert any(str(d).startswith("2018") for d in dates)
 
 
 def test_charts_endpoint_hides_historical_results_by_default(tmp_path, monkeypatch):

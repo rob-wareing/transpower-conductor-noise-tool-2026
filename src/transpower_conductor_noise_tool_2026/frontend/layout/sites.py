@@ -1,6 +1,7 @@
 import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
 
+from .table_columns_config import visible_column_defs
 from .table_styles import EDITABLE_CELL_HIGHLIGHT, LEFT_ALIGN_HEADER
 
 ALWAYS_READONLY_COLUMNS = {"noise_site_id", "site_name"}
@@ -27,7 +28,7 @@ def content(write_access: bool = False):
             "type": col_type,
             "editable": write_access and col_id not in ALWAYS_READONLY_COLUMNS,
         }
-        for name, col_id, col_type in COLUMN_DEFS
+        for name, col_id, col_type in visible_column_defs("sites", COLUMN_DEFS)
     ]
 
     return html.Div(

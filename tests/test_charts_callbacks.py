@@ -68,7 +68,7 @@ def test_populate_site_options_returns_empty_when_no_backend():
     assert output_value(response, "chart-site-select", "options") == []
 
 
-# --- populate_conductor_treatment_options / populate_grease_options ----
+# --- populate_reconductoring_events_store / populate_conductor_treatment_options / populate_grease_options ----
 
 
 def _events():
@@ -98,8 +98,42 @@ def _events():
     ]
 
 
-def test_populate_conductor_treatment_options_unfiltered_and_sorted(fake_client):
+def _events_data():
+    # The dcc.Store shape (JSON dicts), as populate_reconductoring_events_store
+    # would produce and as populate_conductor_treatment_options/populate_grease_options
+    # now consume, instead of each calling client.get_reconductoring_events() itself.
+    return [event.model_dump(mode="json") for event in _events()]
+
+
+def test_populate_reconductoring_events_store_fetches_once(fake_client):
     fake_client.get_reconductoring_events.return_value = _events()
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("chart-reconductoring-events-store", "data")],
+        inputs=[("chart-init", "n_intervals", 1)],
+    )
+
+    fake_client.get_reconductoring_events.assert_called_once_with()
+    data = output_value(response, "chart-reconductoring-events-store", "data")
+    assert len(data) == 3
+    assert data[0]["conductor_and_treatment"] == "Standard conductor (standard grease)"
+
+
+def test_populate_reconductoring_events_store_returns_empty_when_no_backend():
+    app = _build_app(fake_client=None, backend_url=None)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("chart-reconductoring-events-store", "data")],
+        inputs=[("chart-init", "n_intervals", 1)],
+    )
+
+    assert output_value(response, "chart-reconductoring-events-store", "data") == []
+
+
+def test_populate_conductor_treatment_options_unfiltered_and_sorted(fake_client):
     app = _build_app(fake_client)
 
     response = dispatch_callback(
@@ -108,7 +142,10 @@ def test_populate_conductor_treatment_options_unfiltered_and_sorted(fake_client)
             ("chart-conductor-treatment", "options"),
             ("chart-conductor-treatment", "value"),
         ],
-        inputs=[("chart-site-select", "value", None)],
+        inputs=[
+            ("chart-site-select", "value", None),
+            ("chart-reconductoring-events-store", "data", _events_data()),
+        ],
         state=[("chart-conductor-treatment", "value", [])],
     )
 
@@ -120,7 +157,6 @@ def test_populate_conductor_treatment_options_unfiltered_and_sorted(fake_client)
 
 
 def test_populate_conductor_treatment_options_filters_by_selected_sites(fake_client):
-    fake_client.get_reconductoring_events.return_value = _events()
     app = _build_app(fake_client)
 
     response = dispatch_callback(
@@ -129,7 +165,10 @@ def test_populate_conductor_treatment_options_filters_by_selected_sites(fake_cli
             ("chart-conductor-treatment", "options"),
             ("chart-conductor-treatment", "value"),
         ],
-        inputs=[("chart-site-select", "value", [51])],
+        inputs=[
+            ("chart-site-select", "value", [51]),
+            ("chart-reconductoring-events-store", "data", _events_data()),
+        ],
         state=[("chart-conductor-treatment", "value", [])],
     )
 
@@ -146,7 +185,6 @@ def test_populate_conductor_treatment_options_drops_stale_selected_value(fake_cl
     # Site 51 is selected, so only "Standard conductor..." is a valid option
     # any more - a previously-selected "High-temp conductor..." value (only
     # valid for site 52) must be dropped rather than left dangling.
-    fake_client.get_reconductoring_events.return_value = _events()
     app = _build_app(fake_client)
 
     response = dispatch_callback(
@@ -155,7 +193,10 @@ def test_populate_conductor_treatment_options_drops_stale_selected_value(fake_cl
             ("chart-conductor-treatment", "options"),
             ("chart-conductor-treatment", "value"),
         ],
-        inputs=[("chart-site-select", "value", [51])],
+        inputs=[
+            ("chart-site-select", "value", [51]),
+            ("chart-reconductoring-events-store", "data", _events_data()),
+        ],
         state=[
             (
                 "chart-conductor-treatment",
@@ -171,14 +212,16 @@ def test_populate_conductor_treatment_options_drops_stale_selected_value(fake_cl
 
 
 def test_populate_grease_options_uses_grease_field(fake_client):
-    fake_client.get_reconductoring_events.return_value = _events()
     fake_client.get_grease_descriptions.return_value = []
     app = _build_app(fake_client)
 
     response = dispatch_callback(
         app,
         outputs=[("chart-grease", "options"), ("chart-grease", "value")],
-        inputs=[("chart-site-select", "value", [52])],
+        inputs=[
+            ("chart-site-select", "value", [52]),
+            ("chart-reconductoring-events-store", "data", _events_data()),
+        ],
         state=[("chart-grease", "value", [])],
     )
 
@@ -188,7 +231,6 @@ def test_populate_grease_options_uses_grease_field(fake_client):
 
 
 def test_populate_grease_options_appends_description_when_available(fake_client):
-    fake_client.get_reconductoring_events.return_value = _events()
     fake_client.get_grease_descriptions.return_value = [
         GreaseDescription(grease="synthetic", description="Synthetic grease blend"),
     ]
@@ -197,7 +239,10 @@ def test_populate_grease_options_appends_description_when_available(fake_client)
     response = dispatch_callback(
         app,
         outputs=[("chart-grease", "options"), ("chart-grease", "value")],
-        inputs=[("chart-site-select", "value", [52])],
+        inputs=[
+            ("chart-site-select", "value", [52]),
+            ("chart-reconductoring-events-store", "data", _events_data()),
+        ],
         state=[("chart-grease", "value", [])],
     )
 
@@ -232,23 +277,18 @@ def _chart_inputs(**overrides):
 def test_refresh_charts_fills_in_defaults_for_falsy_inputs(fake_client):
     fake_client.get_charts.return_value = {
         "noise_chart": {"data": [], "layout": {"title": "noise"}},
-        "timeline_chart": {"data": [], "layout": {"title": "timeline"}},
     }
     app = _build_app(fake_client)
 
     response = dispatch_callback(
         app,
-        outputs=[("noise-chart", "figure"), ("timeline-chart", "figure")],
+        outputs=[("noise-chart", "figure")],
         inputs=_chart_inputs(),
     )
 
     assert output_value(response, "noise-chart", "figure") == {
         "data": [],
         "layout": {"title": "noise"},
-    }
-    assert output_value(response, "timeline-chart", "figure") == {
-        "data": [],
-        "layout": {"title": "timeline"},
     }
 
     filters = fake_client.get_charts.call_args[0][0]
@@ -265,15 +305,12 @@ def test_refresh_charts_fills_in_defaults_for_falsy_inputs(fake_client):
 
 
 def test_refresh_charts_passes_through_explicit_filter_values(fake_client):
-    fake_client.get_charts.return_value = {
-        "noise_chart": {"data": [], "layout": {}},
-        "timeline_chart": {"data": [], "layout": {}},
-    }
+    fake_client.get_charts.return_value = {"noise_chart": {"data": [], "layout": {}}}
     app = _build_app(fake_client)
 
     dispatch_callback(
         app,
-        outputs=[("noise-chart", "figure"), ("timeline-chart", "figure")],
+        outputs=[("noise-chart", "figure")],
         inputs=_chart_inputs(**{
             "chart-site-select.value": [51],
             "chart-condition.value": "dry",
@@ -301,18 +338,48 @@ def test_refresh_charts_passes_through_explicit_filter_values(fake_client):
     assert filters.show_historical is True
 
 
-def test_refresh_charts_returns_empty_figures_when_no_backend():
+def test_refresh_charts_returns_empty_figure_when_no_backend():
     app = _build_app(fake_client=None, backend_url=None)
 
     response = dispatch_callback(
         app,
-        outputs=[("noise-chart", "figure"), ("timeline-chart", "figure")],
+        outputs=[("noise-chart", "figure")],
         inputs=_chart_inputs(),
     )
 
-    empty_figure = {"data": [], "layout": {}}
-    assert output_value(response, "noise-chart", "figure") == empty_figure
-    assert output_value(response, "timeline-chart", "figure") == empty_figure
+    assert output_value(response, "noise-chart", "figure") == {"data": [], "layout": {}}
+
+
+# --- refresh_chart_timeline (decoupled from every Charts tab option) -------
+
+
+def test_refresh_chart_timeline_ignores_every_filter_and_only_triggers_on_init(fake_client):
+    fake_client.get_chart_timeline.return_value = {"data": [], "layout": {"title": "timeline"}}
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("timeline-chart", "figure")],
+        inputs=[("chart-init", "n_intervals", 1)],
+    )
+
+    assert output_value(response, "timeline-chart", "figure") == {
+        "data": [],
+        "layout": {"title": "timeline"},
+    }
+    fake_client.get_chart_timeline.assert_called_once_with()
+
+
+def test_refresh_chart_timeline_returns_empty_figure_when_no_backend():
+    app = _build_app(fake_client=None, backend_url=None)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("timeline-chart", "figure")],
+        inputs=[("chart-init", "n_intervals", 1)],
+    )
+
+    assert output_value(response, "timeline-chart", "figure") == {"data": [], "layout": {}}
 
 
 # --- toggle_chart_table ---------------------------------------------------

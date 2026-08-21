@@ -14,6 +14,9 @@ from transpower_conductor_noise_tool_2026.backend.persistence.repositories.outag
 from transpower_conductor_noise_tool_2026.backend.persistence.repositories.processed_reading_repository import (
     ProcessedReadingRepository,
 )
+from transpower_conductor_noise_tool_2026.backend.persistence.repositories.reading_availability_repository import (
+    ReadingAvailabilityRepository,
+)
 from transpower_conductor_noise_tool_2026.backend.persistence.repositories.reconductoring_repository import (
     ReconductoringRepository,
 )
@@ -24,11 +27,6 @@ from transpower_conductor_noise_tool_2026.shared.contracts import ChartFilters
 
 PARAMETER_COLUMNS = {"leq_adj", "tone_100hz", "tone_200hz"}
 CONDITION_TO_IS_WET = {"wet": True, "dry": False}
-# Default lower bound for the underlying processed_reading query when the
-# caller hasn't picked a start date - applied here only (not on
-# ChartFilters.start_date itself), so _historical_dataframe's own date
-# filtering of pre-2020 HistoricalResult overlay points is unaffected.
-DEFAULT_CHART_START_DATE = date(2020, 1, 1)
 RAW_COLUMNS = [
     "id",
     "noise_site_id",
@@ -405,28 +403,31 @@ def _build_noise_chart(df, parameter, plot_by, group_by_conductor, linestyles, t
     return _figure_to_json(figure)
 
 
-def _build_timeline_chart(df):
+def _build_timeline_chart(availability_rows):
+    # availability_rows: [{"noise_site_id", "site_name", "min_datetime",
+    # "max_datetime"}, ...], already sorted by noise_site_id - see
+    # get_availability_timeline. Deliberately not a pandas DataFrame; the
+    # source is already one pre-aggregated row per site, no groupby needed.
     figure = go.Figure()
 
-    if df.empty:
+    if not availability_rows:
         figure.update_layout(title="Data Availability Timeline", height=400)
         return _figure_to_json(figure)
 
-    summary = (
-        df.groupby(["noise_site_id", "site_name"], observed=True)["datetime"]
-        .agg(["min", "max"])
-        .reset_index()
-        .sort_values("noise_site_id")
-    )
-
     tickvals = []
     ticktext = []
-    for position, row in enumerate(summary.itertuples()):
-        label = f"({row.noise_site_id}) {row.site_name}"
+    for position, row in enumerate(availability_rows):
+        label = f"({row['noise_site_id']}) {row['site_name']}"
         color = TIMELINE_COLORS[position % len(TIMELINE_COLORS)]
         figure.add_trace(
             go.Scatter(
-                x=[row.min, row.max, row.max, row.min, row.min],
+                x=[
+                    row["min_datetime"],
+                    row["max_datetime"],
+                    row["max_datetime"],
+                    row["min_datetime"],
+                    row["min_datetime"],
+                ],
                 y=[position - 0.4, position - 0.4, position + 0.4, position + 0.4, position - 0.4],
                 fill="toself",
                 mode="lines",
@@ -448,11 +449,42 @@ def _build_timeline_chart(df):
     return _figure_to_json(figure)
 
 
+def get_availability_timeline(
+    site_repository: SiteRepository | None = None,
+    availability_repository: ReadingAvailabilityRepository | None = None,
+):
+    # Deliberately decoupled from ChartFilters/every other Charts tab option
+    # (site selection, date range, condition, conductor/grease,
+    # detection_logic, show_historical) - always shows every active site's
+    # full processed_reading history, precomputed in reading_availability
+    # (see scripts/generate_reading_availability.py) rather than derived from
+    # whatever the noise chart's own request happens to be scoped to.
+    site_repository = site_repository or SiteRepository()
+    availability_repository = availability_repository or ReadingAvailabilityRepository()
+
+    # list_sites() already excludes ignored sites - the timeline must never
+    # show one, same as every other consumer of this repository.
+    sites_by_id = {site.noise_site_id: site for site in site_repository.list_sites()}
+    rows = [
+        {
+            "noise_site_id": row.noise_site_id,
+            "site_name": sites_by_id[row.noise_site_id].site_name,
+            "min_datetime": row.min_datetime,
+            "max_datetime": row.max_datetime,
+        }
+        for row in availability_repository.list_all()
+        if row.noise_site_id in sites_by_id
+    ]
+    rows.sort(key=lambda row: row["noise_site_id"])
+    return _build_timeline_chart(rows)
+
+
 def _fetch_filtered_readings_dataframe(
     filters: ChartFilters, repository, site_repository, events, outages
 ):
-    effective_start_date = filters.start_date or DEFAULT_CHART_START_DATE
-    start_datetime = datetime.combine(effective_start_date, datetime.min.time())
+    start_datetime = (
+        datetime.combine(filters.start_date, datetime.min.time()) if filters.start_date else None
+    )
     end_datetime = (
         datetime.combine(filters.end_date, datetime.max.time()) if filters.end_date else None
     )
@@ -530,12 +562,7 @@ def get_chart_figures(
         linestyles,
         title_override=DAYS_SINCE_GUARD_TITLE if days_since_guard else None,
     )
-    # The timeline (data-availability) chart always reflects raw reading dates
-    # regardless of plot_by/bucketing, but does respect the same site/date/
-    # condition/conductor/grease filters as the line chart, matching the old
-    # app's own timeline callback.
-    timeline_chart = _build_timeline_chart(df)
-    return noise_chart, timeline_chart
+    return noise_chart
 
 
 def get_chart_table_rows(

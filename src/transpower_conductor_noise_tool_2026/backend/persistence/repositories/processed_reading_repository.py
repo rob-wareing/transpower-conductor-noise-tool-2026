@@ -77,6 +77,30 @@ class ProcessedReadingRepository:
             query = query.limit(limit)
         return query.all()
 
+    def aggregate_availability(self):
+        # One row per site: min/max/count over its *full* processed_reading
+        # history - never capped by per_site_limit and never filtered by
+        # date/condition/conductor/detection_logic, since the whole point of
+        # reading_availability is a true, filter-independent picture of data
+        # availability. SQL Core aggregation (not pandas), same reasoning as
+        # ReadingRepository.aggregate_wind_rose.
+        query = db.session.query(
+            ProcessedReading.noise_site_id,
+            func.min(ProcessedReading.datetime).label("min_datetime"),
+            func.max(ProcessedReading.datetime).label("max_datetime"),
+            func.count(ProcessedReading.id).label("row_count"),
+        ).group_by(ProcessedReading.noise_site_id)
+
+        return [
+            {
+                "noise_site_id": row.noise_site_id,
+                "min_datetime": row.min_datetime,
+                "max_datetime": row.max_datetime,
+                "row_count": row.row_count,
+            }
+            for row in query.all()
+        ]
+
     def find_by_id(self, reading_id):
         return db.session.get(ProcessedReading, reading_id)
 

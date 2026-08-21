@@ -8,6 +8,7 @@ from .outage_type import OutageType
 from .processed_reading import ProcessedReading
 from .rain_rate_fit import RainRateFit
 from .reading import Reading
+from .reading_availability import ReadingAvailability
 from .reconductoring import Reconductoring
 from .site import Site
 from .user import User

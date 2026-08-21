@@ -4,12 +4,12 @@ from dash import dash_table, dcc, html
 from .table_styles import EDITABLE_CELL_HIGHLIGHT
 
 # The date picker intentionally has no default start_date: refresh_charts
-# treats an empty picker as "use the backend's default window" (see
-# backend.domain.chart_service.DEFAULT_CHART_START_DATE). Setting a visual
-# default here would make Dash fire the callback with an explicit start_date
-# on every load, which would also change what _historical_dataframe splices
-# into the overlay - so the mismatch between "picker looks empty" and "a
-# default is still applied server-side" is deliberate, not an oversight.
+# treats an empty picker as "no lower bound - query full history" (the
+# backend no longer applies a default floor either, see
+# chart_service._fetch_filtered_readings_dataframe). A visual default here
+# would make Dash fire the callback with an explicit start_date on every
+# load, which would also change what _historical_dataframe splices into the
+# overlay.
 
 CONDITION_OPTIONS = [
     {"label": "All", "value": "all"},
@@ -72,6 +72,10 @@ def content(write_access: bool = False):
     return html.Div(
         [
             dcc.Interval(id="chart-init", interval=1000, n_intervals=0, max_intervals=1),
+            # Populated once per page load by populate_reconductoring_events_store
+            # and shared by both the conductor/treatment and grease dropdowns -
+            # avoids two separate identical GET /api/reconductoring calls.
+            dcc.Store(id="chart-reconductoring-events-store"),
             html.Div(
                 [
                     # Row 1: Sites, Date range

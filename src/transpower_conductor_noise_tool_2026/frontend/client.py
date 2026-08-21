@@ -92,6 +92,13 @@ class BackendClient:
         response.raise_for_status()
         return response.json()
 
+    def get_chart_timeline(self):
+        # No filters - deliberately decoupled from every other Charts tab
+        # option, see chart_service.get_availability_timeline.
+        response = requests.get(f"{self.base_url}/api/charts/timeline", timeout=30)
+        response.raise_for_status()
+        return response.json()["timeline_chart"]
+
     def get_conductor_summary_chart(self, filters: ConductorSummaryFilters):
         response = requests.post(
             f"{self.base_url}/api/trends/conductor-summary",

@@ -19,8 +19,12 @@ def _make_app(tmp_path, monkeypatch):
     return create_app({"TESTING": True})
 
 
-def _event(noise_site_id, reconductoring_date):
-    return Reconductoring(noise_site_id=noise_site_id, reconductoring_date=reconductoring_date)
+def _event(noise_site_id, reconductoring_date, for_reconductoring_age=True):
+    return Reconductoring(
+        noise_site_id=noise_site_id,
+        reconductoring_date=reconductoring_date,
+        for_reconductoring_age=for_reconductoring_age,
+    )
 
 
 def test_latest_by_site_returns_the_most_recent_date_per_site(tmp_path, monkeypatch):
@@ -49,3 +53,28 @@ def test_latest_by_site_has_no_entry_for_sites_with_no_events(tmp_path, monkeypa
         cutoffs = ReconductoringRepository().latest_by_site()
 
         assert SITE_B not in cutoffs
+
+
+def test_latest_by_site_ignores_rows_not_flagged_for_reconductoring_age(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
+    with app.app_context():
+        # SITE_A's most recent row is a treatment-only event, not flagged for
+        # age purposes - the genuine event is the earlier, flagged one.
+        db.session.add(_event(SITE_A, date(2022, 1, 1), for_reconductoring_age=True))
+        db.session.add(_event(SITE_A, date(2024, 6, 1), for_reconductoring_age=False))
+        db.session.commit()
+
+        cutoffs = ReconductoringRepository().latest_by_site()
+
+        assert cutoffs[SITE_A] == date(2022, 1, 1)
+
+
+def test_latest_by_site_has_no_entry_when_every_row_is_excluded(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
+    with app.app_context():
+        db.session.add(_event(SITE_A, date(2022, 1, 1), for_reconductoring_age=False))
+        db.session.commit()
+
+        cutoffs = ReconductoringRepository().latest_by_site()
+
+        assert SITE_A not in cutoffs

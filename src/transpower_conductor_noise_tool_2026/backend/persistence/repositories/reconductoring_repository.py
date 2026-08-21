@@ -12,12 +12,21 @@ class ReconductoringRepository:
 
     def latest_by_site(self):
         # {noise_site_id: most recent reconductoring_date} - only sites with
-        # at least one event appear; a site with no reconductoring history
-        # has no entry at all, not a None value.
-        rows = db.session.query(
-            Reconductoring.noise_site_id,
-            sa.func.max(Reconductoring.reconductoring_date),
-        ).group_by(Reconductoring.noise_site_id).all()
+        # at least one qualifying event appear; a site with no reconductoring
+        # history (or none flagged for_reconductoring_age) has no entry at
+        # all, not a None value. Excludes rows not flagged
+        # for_reconductoring_age - not every logged row is a genuine new-
+        # conductor event, some are just a grease/treatment change on the
+        # same physical conductor (see the column's own comment).
+        rows = (
+            db.session.query(
+                Reconductoring.noise_site_id,
+                sa.func.max(Reconductoring.reconductoring_date),
+            )
+            .filter(Reconductoring.for_reconductoring_age.is_(True))
+            .group_by(Reconductoring.noise_site_id)
+            .all()
+        )
         return dict(rows)
 
     def find_by_id(self, event_id):

@@ -12,9 +12,11 @@ MEASUREMENT_DURATION_TO_MINUTES = {"1min": 1, "15min": 15}
 
 
 def _conductor_options(events, site_ids, field):
+    # events: dicts from the chart-reconductoring-events-store dcc.Store
+    # (JSON-serialized, so dict access rather than attribute access).
     if site_ids:
-        events = [event for event in events if event.noise_site_id in site_ids]
-    values = sorted({getattr(event, field) for event in events if getattr(event, field)})
+        events = [event for event in events if event["noise_site_id"] in site_ids]
+    values = sorted({event[field] for event in events if event.get(field)})
     return [{"label": value, "value": value} for value in values]
 
 
@@ -35,15 +37,26 @@ def register_callbacks(dash_app, backend_url: str | None):
         ]
 
     @dash_app.callback(
+        Output("chart-reconductoring-events-store", "data"),
+        Input("chart-init", "n_intervals"),
+    )
+    def populate_reconductoring_events_store(_n_intervals):
+        # Fetched once per page load and shared by both dropdowns below,
+        # instead of each independently calling client.get_reconductoring_events()
+        # (previously two identical HTTP round trips on every default load).
+        if client is None:
+            return []
+        return [event.model_dump(mode="json") for event in client.get_reconductoring_events()]
+
+    @dash_app.callback(
         Output("chart-conductor-treatment", "options"),
         Output("chart-conductor-treatment", "value"),
         Input("chart-site-select", "value"),
+        Input("chart-reconductoring-events-store", "data"),
         State("chart-conductor-treatment", "value"),
     )
-    def populate_conductor_treatment_options(site_ids, current_value):
-        if client is None:
-            return [], []
-        events = client.get_reconductoring_events()
+    def populate_conductor_treatment_options(site_ids, events, current_value):
+        events = events or []
         options = _conductor_options(events, site_ids, "conductor_and_treatment")
         valid_values = {option["value"] for option in options}
         kept = [value for value in (current_value or []) if value in valid_values]
@@ -53,12 +66,13 @@ def register_callbacks(dash_app, backend_url: str | None):
         Output("chart-grease", "options"),
         Output("chart-grease", "value"),
         Input("chart-site-select", "value"),
+        Input("chart-reconductoring-events-store", "data"),
         State("chart-grease", "value"),
     )
-    def populate_grease_options(site_ids, current_value):
+    def populate_grease_options(site_ids, events, current_value):
+        events = events or []
         if client is None:
             return [], []
-        events = client.get_reconductoring_events()
         options = _conductor_options(events, site_ids, "grease")
         descriptions = {item.grease: item.description for item in client.get_grease_descriptions()}
         for option in options:
@@ -71,7 +85,6 @@ def register_callbacks(dash_app, backend_url: str | None):
 
     @dash_app.callback(
         Output("noise-chart", "figure"),
-        Output("timeline-chart", "figure"),
         Input("chart-init", "n_intervals"),
         Input("chart-site-select", "value"),
         Input("chart-date-range", "start_date"),
@@ -103,7 +116,7 @@ def register_callbacks(dash_app, backend_url: str | None):
     ):
         empty_figure = {"data": [], "layout": {}}
         if client is None:
-            return empty_figure, empty_figure
+            return empty_figure
 
         filters = ChartFilters(
             noise_site_id=site_ids or [],
@@ -120,7 +133,20 @@ def register_callbacks(dash_app, backend_url: str | None):
             show_historical=bool(show_historical),
         )
         charts = client.get_charts(filters)
-        return charts["noise_chart"], charts["timeline_chart"]
+        return charts["noise_chart"]
+
+    @dash_app.callback(
+        Output("timeline-chart", "figure"),
+        Input("chart-init", "n_intervals"),
+    )
+    def refresh_chart_timeline(_n_intervals):
+        # Deliberately the ONLY Input - the Data Availability Timeline must
+        # not change based on any Charts tab filter (site, date, condition,
+        # conductor/grease, detection_logic, show_historical). See
+        # chart_service.get_availability_timeline.
+        if client is None:
+            return {"data": [], "layout": {}}
+        return client.get_chart_timeline()
 
     @dash_app.callback(
         Output("chart-table-collapse", "is_open"),

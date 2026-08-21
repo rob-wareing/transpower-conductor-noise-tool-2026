@@ -84,6 +84,7 @@ def test_refresh_reconductoring_table_returns_pass_through_rows(fake_client):
     assert len(rows) == 1
     assert rows[0]["id"] == 1
     assert rows[0]["conductor_and_treatment"] == "Standard conductor (standard grease)"
+    assert rows[0]["for_reconductoring_age"] == 1  # numeric DataTable column, 0/1
 
 
 # --- add_row ---------------------------------------------------------------
@@ -100,7 +101,9 @@ def test_add_row_appends_blank_row_keyed_by_editable_fields(fake_client):
     )
 
     rows = output_value(response, "reconductoring-table", "data")
-    assert rows == [{field: "" for field in reconductoring_callbacks.EDITABLE_FIELDS}]
+    expected = {field: "" for field in reconductoring_callbacks.CORE_EDITABLE_FIELDS}
+    expected["for_reconductoring_age"] = 1  # matches the column's DB default
+    assert rows == [expected]
 
 
 # --- save_reconductoring (diff-against-server-truth) -----------------
@@ -152,6 +155,27 @@ def test_save_reconductoring_row_with_id_goes_through_update(fake_client):
     fake_client.update_reconductoring_event.assert_called_once()
     assert fake_client.update_reconductoring_event.call_args[0][0] == 1
     fake_client.create_reconductoring_event.assert_not_called()
+
+
+def test_save_reconductoring_sends_false_for_reconductoring_age_not_none(fake_client):
+    # Flagging a row False (a treatment-only event) must actually reach the
+    # backend as False - the generic "row.get(field) or None" treatment used
+    # for the other fields would wrongly turn a falsy 0/False into None here.
+    fake_client.get_reconductoring_events.return_value = [_event(id=1)]
+    fake_client.update_reconductoring_event.return_value = MagicMock(status_code=200)
+    app = _build_app(fake_client)
+
+    row = _event(id=1).model_dump(mode="json")
+    row["for_reconductoring_age"] = 0
+    dispatch_callback(
+        app,
+        outputs=[("reconductoring-status", "children")],
+        inputs=[("reconductoring-save-button", "n_clicks", 1)],
+        state=[("reconductoring-table", "data", [row])],
+    )
+
+    update = fake_client.update_reconductoring_event.call_args[0][1]
+    assert update.for_reconductoring_age is False
 
 
 def test_save_reconductoring_blank_new_row_is_silently_skipped(fake_client):

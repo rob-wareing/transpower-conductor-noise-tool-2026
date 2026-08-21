@@ -269,6 +269,7 @@ class ReconductoringDetail(BaseModel):
     grease: str | None = None
     reconductoring_date: date
     notes: str | None = None
+    for_reconductoring_age: bool = True
 
 
 class ReconductoringCreate(BaseModel):
@@ -277,6 +278,7 @@ class ReconductoringCreate(BaseModel):
     grease: str | None = None
     reconductoring_date: date
     notes: str | None = None
+    for_reconductoring_age: bool = True
 
 
 class ReconductoringUpdate(BaseModel):
@@ -284,6 +286,7 @@ class ReconductoringUpdate(BaseModel):
     grease: str | None = None
     reconductoring_date: date | None = None
     notes: str | None = None
+    for_reconductoring_age: bool | None = None
 
 
 class GreaseDescription(BaseModel):

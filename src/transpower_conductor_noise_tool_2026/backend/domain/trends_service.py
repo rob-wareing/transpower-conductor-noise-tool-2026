@@ -6,6 +6,7 @@ import plotly.colors
 import plotly.graph_objects as go
 import plotly.io as pio
 
+from transpower_conductor_noise_tool_2026.backend.config import Settings
 from transpower_conductor_noise_tool_2026.backend.persistence.repositories.conductor_age_fit_repository import (
     ConductorAgeFitRepository,
 )
@@ -82,6 +83,7 @@ def get_rain_rate_vs_level(filters, repository=None, site_repository=None, fit_r
             detection_logic=filters.detection_logic,
             include=True,
             is_wet=None if filters.include_dry else True,
+            per_site_limit=Settings.TRENDS_PER_SITE_LIMIT,
         )
         if site_ids
         else []
@@ -238,7 +240,10 @@ def get_age_effects(filters, repository=None, site_repository=None, fit_reposito
         [
             reading
             for reading in repository.list_readings(
-                site_ids=site_ids, detection_logic=filters.detection_logic, include=True
+                site_ids=site_ids,
+                detection_logic=filters.detection_logic,
+                include=True,
+                per_site_limit=Settings.TRENDS_PER_SITE_LIMIT,
             )
             if reading.reconductoring_age is not None
         ]

@@ -76,6 +76,7 @@ services:
       - AUTO_SEED_DATA=false
       - PER_SITE_READING_LIMIT=${PER_SITE_READING_LIMIT:-3000}
       - CHARTS_PER_SITE_LIMIT=${CHARTS_PER_SITE_LIMIT:-100000}
+      - TRENDS_PER_SITE_LIMIT=${TRENDS_PER_SITE_LIMIT:-100000}
     volumes:
       - ./data:/app/data
     networks:

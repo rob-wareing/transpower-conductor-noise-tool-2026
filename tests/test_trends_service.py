@@ -27,8 +27,12 @@ def _reading(noise_site_id, detection_logic, rain1, l90, tone_100hz, tone_200hz,
 class _FakeProcessedReadingRepository:
     def __init__(self, readings):
         self._readings = readings
+        self.last_per_site_limit = "not called"
 
-    def list_readings(self, site_ids=None, detection_logic=None, include=None, is_wet=None):
+    def list_readings(
+        self, site_ids=None, detection_logic=None, include=None, is_wet=None, per_site_limit=None
+    ):
+        self.last_per_site_limit = per_site_limit
         return [
             r
             for r in self._readings
@@ -93,6 +97,24 @@ def test_get_rain_rate_vs_level_builds_one_trace_per_site():
     assert site_137_trace["x"] == [1.0]
     assert site_137_trace["y"] == [38.0]
     assert "Site B" in site_137_trace["name"]
+
+
+def test_get_rain_rate_vs_level_uses_the_trends_specific_per_site_limit():
+    from transpower_conductor_noise_tool_2026.backend.config import Settings
+
+    repository = _FakeProcessedReadingRepository([])
+    filters = RainRateVsLevelFilters(detection_logic="original", metric="l90")
+
+    trends_service.get_rain_rate_vs_level(
+        filters,
+        repository=repository,
+        site_repository=_FakeSiteRepository(
+            [SimpleNamespace(noise_site_id=51, site_name="Site A")]
+        ),
+        fit_repository=_FakeRainRateFitRepository(),
+    )
+
+    assert repository.last_per_site_limit == Settings.TRENDS_PER_SITE_LIMIT
 
 
 def test_get_rain_rate_vs_level_metric_selects_which_values_are_plotted():
@@ -359,6 +381,24 @@ def test_get_age_effects_builds_one_trace_per_site():
     assert site_51_trace["x"] == [10, 20]
     assert site_51_trace["y"] == [40.0, 44.0]
     assert "Site A" in site_51_trace["name"]
+
+
+def test_get_age_effects_uses_the_trends_specific_per_site_limit():
+    from transpower_conductor_noise_tool_2026.backend.config import Settings
+
+    repository = _FakeProcessedReadingRepository([])
+    filters = AgeEffectsFilters(detection_logic="original", metric="l90")
+
+    trends_service.get_age_effects(
+        filters,
+        repository=repository,
+        site_repository=_FakeSiteRepository(
+            [SimpleNamespace(noise_site_id=51, site_name="Site A")]
+        ),
+        fit_repository=_FakeConductorAgeFitRepository(),
+    )
+
+    assert repository.last_per_site_limit == Settings.TRENDS_PER_SITE_LIMIT
 
 
 def test_get_age_effects_excludes_rows_with_null_reconductoring_age():

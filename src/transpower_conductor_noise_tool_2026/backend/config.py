@@ -67,7 +67,10 @@ class Settings:
     INGEST_SITE_IDS = _env_int_list("INGEST_SITE_IDS")
     # Per-site cap on ProcessedReadingRepository.list_readings - see that
     # method's own comment for why this must be per-site, not a flat LIMIT.
-    # Default cap for Trends (Rain-rate-vs-level, Age-effects).
+    # ProcessedReadingRepository.DEFAULT_PER_SITE_LIMIT's own fallback value,
+    # used only if some future caller doesn't pass per_site_limit explicitly
+    # - every current caller (Charts, Trends) now passes its own explicit
+    # value below, so this is a generic safety backstop, not tab-specific.
     PER_SITE_READING_LIMIT = int(os.environ.get("PER_SITE_READING_LIMIT", "3000"))
     # A much higher per-site cap used only by the Charts tab (figures + raw
     # table) - Charts is expected to show a site's full history, not a
@@ -77,3 +80,13 @@ class Settings:
     # row count (~50k for the largest, per reading_availability) while still
     # bounding a single request's worst case.
     CHARTS_PER_SITE_LIMIT = int(os.environ.get("CHARTS_PER_SITE_LIMIT", "100000"))
+    # Same reasoning as CHARTS_PER_SITE_LIMIT, but for Trends (Rain-rate-vs-level,
+    # Age-effects). The 3,000-row PER_SITE_READING_LIMIT default silently kept
+    # only each site's most-recent 3,000 rows by *datetime* - fine for a
+    # trend-analysis sample in general, but actively wrong for Age-effects,
+    # whose x-axis (reconductoring_age) is itself time-correlated: for a
+    # long-lived conductor, "most recent N rows" only covers the tail end of
+    # the age range, silently hiding every low-age point and truncating the
+    # visible time series (confirmed live for site 209 - a 5-1277 day age
+    # range collapsed to 952-1277 under the old shared cap).
+    TRENDS_PER_SITE_LIMIT = int(os.environ.get("TRENDS_PER_SITE_LIMIT", "100000"))

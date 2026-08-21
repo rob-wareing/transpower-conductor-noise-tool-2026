@@ -67,7 +67,7 @@ def _build_wind_rose_figure(sectors):
         go.Barpolar(
             r=counts,
             theta=DIRECTION_SECTORS,
-            marker=dict(color=speeds, colorscale="Viridis", colorbar=dict(title="Avg speed")),
+            marker=dict(color=speeds, colorscale="Viridis", colorbar=dict(title="Avg speed (m/s)")),
             hovertemplate="%{theta}: %{r} readings<extra></extra>",
         )
     )

@@ -81,6 +81,16 @@ def _rain_rate_vs_level_panel():
                 ],
                 style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
             ),
+            html.Div(
+                dbc.Button(
+                    "Hide data",
+                    id="trends-rain-rate-hide-data-button",
+                    color="secondary",
+                    size="sm",
+                    n_clicks=0,
+                ),
+                style={"marginBottom": "0.5rem"},
+            ),
             dcc.Graph(id="trends-rain-rate-chart"),
         ]
     )
@@ -186,6 +196,16 @@ def _age_effects_panel():
                     ),
                 ],
                 style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
+            ),
+            html.Div(
+                dbc.Button(
+                    "Hide data",
+                    id="trends-age-effects-hide-data-button",
+                    color="secondary",
+                    size="sm",
+                    n_clicks=0,
+                ),
+                style={"marginBottom": "0.5rem"},
             ),
             dcc.Graph(id="trends-age-effects-chart"),
         ]

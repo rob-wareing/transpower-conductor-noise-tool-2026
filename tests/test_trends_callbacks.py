@@ -81,6 +81,7 @@ def test_refresh_rain_rate_chart_passes_selected_filters(fake_client):
             ("trends-rain-rate-metric", "value", "tone_200hz"),
             ("trends-rain-rate-site-select", "value", [51, 137]),
             ("trends-rain-rate-include-dry", "value", True),
+            ("trends-rain-rate-hide-data-button", "n_clicks", 0),
         ],
     )
 
@@ -107,6 +108,7 @@ def test_refresh_rain_rate_chart_defaults_when_dropdowns_empty(fake_client):
             ("trends-rain-rate-metric", "value", None),
             ("trends-rain-rate-site-select", "value", None),
             ("trends-rain-rate-include-dry", "value", None),
+            ("trends-rain-rate-hide-data-button", "n_clicks", None),
         ],
     )
 
@@ -129,11 +131,116 @@ def test_refresh_rain_rate_chart_handles_no_backend():
             ("trends-rain-rate-metric", "value", "l90"),
             ("trends-rain-rate-site-select", "value", []),
             ("trends-rain-rate-include-dry", "value", False),
+            ("trends-rain-rate-hide-data-button", "n_clicks", None),
         ],
     )
 
     figure = output_value(response, "trends-rain-rate-chart", "figure")
     assert figure == {"data": [], "layout": {}}
+
+
+def test_refresh_rain_rate_chart_hides_marker_traces_when_toggled_on(fake_client):
+    fake_client.get_rain_rate_vs_level_chart.return_value = {
+        "data": [
+            {"type": "scatter", "mode": "markers", "x": [1]},
+            {"type": "scatter", "mode": "lines", "x": [1]},
+        ],
+        "layout": {},
+    }
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-rain-rate-chart", "figure")],
+        inputs=[
+            ("trends-rain-rate-init", "n_intervals", 1),
+            ("trends-rain-rate-detection-logic", "value", "original"),
+            ("trends-rain-rate-metric", "value", "l90"),
+            ("trends-rain-rate-site-select", "value", []),
+            ("trends-rain-rate-include-dry", "value", False),
+            ("trends-rain-rate-hide-data-button", "n_clicks", 1),
+        ],
+    )
+
+    figure = output_value(response, "trends-rain-rate-chart", "figure")
+    assert figure["data"][0]["visible"] is False
+    assert "visible" not in figure["data"][1]
+
+
+def test_refresh_rain_rate_chart_swaps_legend_to_the_line_when_data_hidden(fake_client):
+    fake_client.get_rain_rate_vs_level_chart.return_value = {
+        "data": [
+            {"type": "scatter", "mode": "markers", "x": [1], "name": "(51) Demo Site"},
+            {"type": "scatter", "mode": "lines", "x": [1], "name": "(51) Demo Site — fit"},
+        ],
+        "layout": {},
+    }
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-rain-rate-chart", "figure")],
+        inputs=[
+            ("trends-rain-rate-init", "n_intervals", 1),
+            ("trends-rain-rate-detection-logic", "value", "original"),
+            ("trends-rain-rate-metric", "value", "l90"),
+            ("trends-rain-rate-site-select", "value", []),
+            ("trends-rain-rate-include-dry", "value", False),
+            ("trends-rain-rate-hide-data-button", "n_clicks", 1),
+        ],
+    )
+
+    figure = output_value(response, "trends-rain-rate-chart", "figure")
+    marker_trace, line_trace = figure["data"]
+    assert marker_trace["showlegend"] is False
+    assert line_trace["showlegend"] is True
+
+
+def test_refresh_rain_rate_chart_keeps_default_legend_when_data_shown(fake_client):
+    fake_client.get_rain_rate_vs_level_chart.return_value = {
+        "data": [
+            {"type": "scatter", "mode": "markers", "x": [1], "name": "(51) Demo Site"},
+            {
+                "type": "scatter",
+                "mode": "lines",
+                "x": [1],
+                "name": "(51) Demo Site — fit",
+                "showlegend": False,
+            },
+        ],
+        "layout": {},
+    }
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-rain-rate-chart", "figure")],
+        inputs=[
+            ("trends-rain-rate-init", "n_intervals", 1),
+            ("trends-rain-rate-detection-logic", "value", "original"),
+            ("trends-rain-rate-metric", "value", "l90"),
+            ("trends-rain-rate-site-select", "value", []),
+            ("trends-rain-rate-include-dry", "value", False),
+            ("trends-rain-rate-hide-data-button", "n_clicks", 0),
+        ],
+    )
+
+    figure = output_value(response, "trends-rain-rate-chart", "figure")
+    marker_trace, line_trace = figure["data"]
+    assert "showlegend" not in marker_trace
+    assert line_trace["showlegend"] is False
+
+
+def test_toggle_rain_rate_hide_data_label(fake_client):
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-rain-rate-hide-data-button", "children")],
+        inputs=[("trends-rain-rate-hide-data-button", "n_clicks", 1)],
+    )
+
+    assert output_value(response, "trends-rain-rate-hide-data-button", "children") == "Show data"
 
 
 # --- populate_conductor_summary_site_options --------------------------------
@@ -287,6 +394,7 @@ def test_refresh_age_effects_chart_passes_selected_filters(fake_client):
             ("trends-age-effects-detection-logic", "value", "updated_2026"),
             ("trends-age-effects-metric", "value", "tone_200hz"),
             ("trends-age-effects-site-select", "value", [51, 137]),
+            ("trends-age-effects-hide-data-button", "n_clicks", 0),
         ],
     )
 
@@ -311,6 +419,7 @@ def test_refresh_age_effects_chart_defaults_when_dropdowns_empty(fake_client):
             ("trends-age-effects-detection-logic", "value", None),
             ("trends-age-effects-metric", "value", None),
             ("trends-age-effects-site-select", "value", None),
+            ("trends-age-effects-hide-data-button", "n_clicks", None),
         ],
     )
 
@@ -331,8 +440,78 @@ def test_refresh_age_effects_chart_handles_no_backend():
             ("trends-age-effects-detection-logic", "value", "original"),
             ("trends-age-effects-metric", "value", "l90"),
             ("trends-age-effects-site-select", "value", []),
+            ("trends-age-effects-hide-data-button", "n_clicks", None),
         ],
     )
 
     figure = output_value(response, "trends-age-effects-chart", "figure")
     assert figure == {"data": [], "layout": {}}
+
+
+def test_refresh_age_effects_chart_hides_marker_traces_when_toggled_on(fake_client):
+    fake_client.get_age_effects_chart.return_value = {
+        "data": [
+            {"type": "scatter", "mode": "markers", "x": [1]},
+            {"type": "scatter", "mode": "lines", "x": [1]},
+        ],
+        "layout": {},
+    }
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-age-effects-chart", "figure")],
+        inputs=[
+            ("trends-age-effects-init", "n_intervals", 1),
+            ("trends-age-effects-detection-logic", "value", "original"),
+            ("trends-age-effects-metric", "value", "l90"),
+            ("trends-age-effects-site-select", "value", []),
+            ("trends-age-effects-hide-data-button", "n_clicks", 1),
+        ],
+    )
+
+    figure = output_value(response, "trends-age-effects-chart", "figure")
+    assert figure["data"][0]["visible"] is False
+    assert "visible" not in figure["data"][1]
+
+
+def test_refresh_age_effects_chart_swaps_legend_to_the_line_when_data_hidden(fake_client):
+    fake_client.get_age_effects_chart.return_value = {
+        "data": [
+            {"type": "scatter", "mode": "markers", "x": [1], "name": "(51) Demo Site"},
+            {"type": "scatter", "mode": "lines", "x": [1], "name": "(51) Demo Site — fit"},
+        ],
+        "layout": {},
+    }
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-age-effects-chart", "figure")],
+        inputs=[
+            ("trends-age-effects-init", "n_intervals", 1),
+            ("trends-age-effects-detection-logic", "value", "original"),
+            ("trends-age-effects-metric", "value", "l90"),
+            ("trends-age-effects-site-select", "value", []),
+            ("trends-age-effects-hide-data-button", "n_clicks", 1),
+        ],
+    )
+
+    figure = output_value(response, "trends-age-effects-chart", "figure")
+    marker_trace, line_trace = figure["data"]
+    assert marker_trace["showlegend"] is False
+    assert line_trace["showlegend"] is True
+
+
+def test_toggle_age_effects_hide_data_label(fake_client):
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-age-effects-hide-data-button", "children")],
+        inputs=[("trends-age-effects-hide-data-button", "n_clicks", 1)],
+    )
+
+    assert (
+        output_value(response, "trends-age-effects-hide-data-button", "children") == "Show data"
+    )

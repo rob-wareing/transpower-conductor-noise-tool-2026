@@ -1,7 +1,7 @@
 import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
 
-from .table_styles import EDITABLE_CELL_HIGHLIGHT
+from .table_styles import EDITABLE_CELL_HIGHLIGHT, LEFT_ALIGN_HEADER
 
 COLUMN_DEFS = [
     ("Site ID", "noise_site_id", "numeric"),
@@ -36,6 +36,7 @@ def content(write_access: bool = False):
                 row_deletable=write_access,
                 editable=write_access,
                 style_data_conditional=EDITABLE_CELL_HIGHLIGHT,
+                style_header=LEFT_ALIGN_HEADER,
             ),
             dbc.Button(
                 "Add row",

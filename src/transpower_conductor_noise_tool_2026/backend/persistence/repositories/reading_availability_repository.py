@@ -10,6 +10,9 @@ class ReadingAvailabilityRepository:
     def list_all(self):
         return ReadingAvailability.query.order_by(ReadingAvailability.noise_site_id.asc()).all()
 
+    def find_by_site(self, noise_site_id):
+        return db.session.get(ReadingAvailability, noise_site_id)
+
     def replace_all(self, records):
         # One row per site, always fully regenerated - a site with zero
         # processed_reading rows correctly has no row here, not a stale one.

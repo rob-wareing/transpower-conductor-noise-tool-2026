@@ -2,6 +2,7 @@ import json
 from datetime import date, datetime
 
 import pandas as pd
+import plotly.colors
 import plotly.graph_objects as go
 import plotly.io as pio
 
@@ -67,7 +68,15 @@ BUCKETED_COLUMNS = [
     "leq_adj",
     "tone_100hz",
     "tone_200hz",
+    "linestyle",
+    "is_historical",
 ]
+# Matches trends_service.SITE_COLOR_PALETTE - explicit per-site cycling
+# (rather than Plotly's own implicit per-trace auto-coloring) so a site's
+# historical-segment trace can deliberately share color with its current-
+# segment sibling trace.
+SITE_COLOR_PALETTE = plotly.colors.qualitative.Plotly
+HISTORICAL_OPACITY = 0.5
 PLOT_BY_AXIS_TITLES = {"datetime": "Date", "days_since_conductoring": "Days since conductoring"}
 DAYS_SINCE_GUARD_TITLE = (
     "Select a conductor/treatment or grease filter to plot by days since conductoring"
@@ -168,6 +177,7 @@ def _stamp_conductor(df, events, conductor_and_treatment, grease):
     # subtraction works even when zero rows end up stamped.
     df["reconductoring_date"] = pd.to_datetime(pd.Series(pd.NaT, index=df.index))
     df["days_since_conductoring"] = None
+    df["linestyle"] = "solid"
 
     events_by_site = {}
     for event in events:
@@ -193,6 +203,27 @@ def _stamp_conductor(df, events, conductor_and_treatment, grease):
     ).dt.days
     # reconductoring_date is kept (not just days_since_conductoring) so bucket
     # aggregation can later derive its own per-bucket days-since value from it.
+
+    # Line style is a site-wide visual timeline (which reconductoring "era" a
+    # reading falls in), independent of any active conductor_and_treatment/
+    # grease filter - so it's a second, separate date-ordered walk over
+    # *every* reconductoring event for the site that has a plot_linestyle set
+    # (not just ones matching the filter above). A row before any such event,
+    # or a site with no styled events at all, keeps the "solid" default.
+    linestyle_events_by_site = {}
+    for event in events:
+        if not event.plot_linestyle:
+            continue
+        linestyle_events_by_site.setdefault(event.noise_site_id, []).append(event)
+
+    for site_id, site_events in linestyle_events_by_site.items():
+        for event in sorted(site_events, key=lambda e: e.reconductoring_date):
+            event_datetime = pd.Timestamp(
+                datetime.combine(event.reconductoring_date, datetime.min.time())
+            )
+            mask = (df["noise_site_id"] == site_id) & (df["datetime"] >= event_datetime)
+            df.loc[mask, "linestyle"] = event.plot_linestyle
+
     return df
 
 
@@ -202,15 +233,6 @@ def _apply_conductor_filters(df, conductor_and_treatment, grease):
     if grease:
         df = df.loc[df["grease"].isin(grease)]
     return df
-
-
-def _build_linestyle_index(events):
-    return {
-        (event.noise_site_id, event.conductor_and_treatment or "", event.grease or ""): (
-            event.plot_linestyle or "solid"
-        )
-        for event in events
-    }
 
 
 def _shift_sparse_buckets_forward(df):
@@ -266,6 +288,10 @@ def _bucket_readings(df, interval_weeks, group_by_conductor):
     grouped = working.groupby(group_columns)
     aggregated = grouped[["leq_adj", "tone_100hz", "tone_200hz"]].mean()
     aggregated["site_name"] = grouped["site_name"].first()
+    # A bucket may straddle a linestyle-changing reconductoring date - taking
+    # the first (earliest) row's already-stamped value, same as site_name, is
+    # an approximation an interval_weeks-coarsened bucket inherently accepts.
+    aggregated["linestyle"] = grouped["linestyle"].first()
     if group_by_conductor:
         aggregated["reconductoring_date"] = grouped["reconductoring_date"].first()
     aggregated = aggregated.reset_index().rename(columns={"aggregate_date": "datetime"})
@@ -282,6 +308,7 @@ def _bucket_readings(df, interval_weeks, group_by_conductor):
         aggregated["grease"] = ""
         aggregated["days_since_conductoring"] = None
 
+    aggregated["is_historical"] = False
     return aggregated[BUCKETED_COLUMNS]
 
 
@@ -329,6 +356,7 @@ def _historical_dataframe(filters: ChartFilters, sites_by_id, historical_reposit
     historical_df = _apply_conductor_filters(
         historical_df, filters.conductor_and_treatment, filters.grease
     )
+    historical_df["is_historical"] = True
     return historical_df[BUCKETED_COLUMNS]
 
 
@@ -356,10 +384,37 @@ def _combine_with_historical(current_df, historical_df):
     return combined.sort_values("datetime")
 
 
-def _build_noise_chart(df, parameter, plot_by, group_by_conductor, linestyles, title_override=None):
+def _contiguous_runs(df, columns):
+    # Splits an already-ordered dataframe into consecutive runs of rows that
+    # share the same values across `columns`, without reordering or
+    # collapsing anything - e.g. a site's trace toggling
+    # (is_historical, linestyle) between solid/dash and back over time
+    # produces 3 runs, not 2, even though "solid" repeats.
+    runs = []
+    keys = list(df[columns].itertuples(index=False, name=None))
+    start = 0
+    for position in range(1, len(keys) + 1):
+        if position == len(keys) or keys[position] != keys[start]:
+            runs.append((keys[start], df.iloc[start:position]))
+            start = position
+    return runs
+
+
+def _build_noise_chart(
+    df, parameter, plot_by, group_by_conductor, historical_colors, title_override=None
+):
     figure = go.Figure()
 
     if not df.empty:
+        # Explicit per-site color cycling (not Plotly's own implicit
+        # per-trace auto-coloring) so a site's historical-segment run can
+        # deliberately reuse its current-segment sibling's color.
+        site_ids = sorted(df["noise_site_id"].unique())
+        site_colors = {
+            site_id: SITE_COLOR_PALETTE[index % len(SITE_COLOR_PALETTE)]
+            for index, site_id in enumerate(site_ids)
+        }
+
         group_columns = ["noise_site_id"]
         if group_by_conductor:
             group_columns += ["conductor_and_treatment", "grease"]
@@ -373,27 +428,38 @@ def _build_noise_chart(df, parameter, plot_by, group_by_conductor, linestyles, t
                 continue
 
             name = plot_df["site_name"].iloc[0]
-            linestyle = "solid"
             if group_by_conductor:
-                conductor_and_treatment, grease = key[1], key[2]
+                conductor_and_treatment = key[1]
                 if conductor_and_treatment:
                     name = f"{name} ({conductor_and_treatment})"
-                linestyle = linestyles.get((site_id, conductor_and_treatment, grease), "solid")
 
-            figure.add_trace(
-                go.Scatter(
-                    # Plain Python lists (not numpy-backed pandas Series) so
-                    # plotly's JSON encoder emits real arrays rather than its
-                    # compact base64 "bdata" typed-array format - the chart
-                    # still renders either way, but a plain-list response is
-                    # what any generic JSON consumer of this API expects.
-                    x=plot_df[plot_by].tolist(),
-                    y=plot_df[parameter].tolist(),
-                    mode="lines+markers",
-                    name=name,
-                    line=dict(dash=linestyle),
+            base_color = site_colors[site_id]
+            historical_color = historical_colors.get(site_id) or base_color
+            legend_group = f"site-{'-'.join(str(part) for part in key)}"
+
+            for run_index, ((is_historical, linestyle), run_df) in enumerate(
+                _contiguous_runs(plot_df, ["is_historical", "linestyle"])
+            ):
+                color = historical_color if is_historical else base_color
+                figure.add_trace(
+                    go.Scatter(
+                        # Plain Python lists (not numpy-backed pandas Series)
+                        # so plotly's JSON encoder emits real arrays rather
+                        # than its compact base64 "bdata" typed-array format -
+                        # the chart still renders either way, but a plain-
+                        # list response is what any generic JSON consumer of
+                        # this API expects.
+                        x=run_df[plot_by].tolist(),
+                        y=run_df[parameter].tolist(),
+                        mode="lines+markers",
+                        name=name,
+                        legendgroup=legend_group,
+                        showlegend=run_index == 0,
+                        opacity=HISTORICAL_OPACITY if is_historical else 1.0,
+                        line=dict(dash=linestyle, color=color),
+                        marker=dict(color=color),
+                    )
                 )
-            )
 
     figure.update_layout(
         title=title_override or "Noise readings over time",
@@ -558,13 +624,15 @@ def get_chart_figures(
         else:
             chart_df = bucketed_df
 
-    linestyles = _build_linestyle_index(events)
+    historical_colors = {
+        site_id: site.historical_line_color for site_id, site in sites_by_id.items()
+    }
     noise_chart = _build_noise_chart(
         chart_df,
         parameter,
         filters.plot_by,
         group_by_conductor,
-        linestyles,
+        historical_colors,
         title_override=DAYS_SINCE_GUARD_TITLE if days_since_guard else None,
     )
     return noise_chart

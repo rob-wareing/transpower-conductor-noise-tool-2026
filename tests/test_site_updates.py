@@ -27,6 +27,7 @@ def test_sites_detail_endpoint_returns_full_fields(tmp_path, monkeypatch):
         "site_name",
         "site_code",
         "plot_color",
+        "historical_line_color",
         "height_adj_db",
         "data_folder",
         "report_folder",

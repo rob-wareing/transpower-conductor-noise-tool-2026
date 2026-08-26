@@ -11,6 +11,12 @@ class Site(db.Model):
     site_name = db.Column(db.String(100), nullable=False)
     site_code = db.Column(db.String(20), nullable=True)
     plot_color = db.Column(db.String(7), nullable=True)
+    # Overrides the color used for this site's *historical* (manually-
+    # surveyed HistoricalResult) chart points/lines - unset means those
+    # points fall back to reusing the site's own current-trace color (see
+    # chart_service.py's SITE_COLOR_PALETTE cycling), just rendered at
+    # reduced opacity like every other site's historical segment.
+    historical_line_color = db.Column(db.String(7), nullable=True)
     height_adj_db = db.Column(db.Numeric(4, 2), nullable=False, default=0)
     data_folder = db.Column(db.String(500), nullable=True)
     report_folder = db.Column(db.String(500), nullable=True)

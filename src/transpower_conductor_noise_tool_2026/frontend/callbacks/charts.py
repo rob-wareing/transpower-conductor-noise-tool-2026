@@ -26,19 +26,25 @@ def register_callbacks(dash_app, backend_url: str | None):
 
     @dash_app.callback(
         Output("chart-site-select", "options"),
+        Output("chart-site-select", "value"),
         Input("chart-init", "n_intervals"),
     )
     def populate_site_options(_n_intervals):
         if client is None:
-            return []
+            return [], []
 
-        return [
+        options = [
             {"label": f"({site.noise_site_id}) {site.site_name}", "value": site.noise_site_id}
             for site in client.get_sites()
         ]
+        # Pre-select every site on initial load, rather than leaving the
+        # dropdown showing no chips (functionally identical either way - an
+        # empty noise_site_id filter already means "every active site", see
+        # ChartFilters - but this makes that visible instead of implicit).
+        return options, [option["value"] for option in options]
 
     @dash_app.callback(
-        Output("chart-site-select", "value"),
+        Output("chart-site-select", "value", allow_duplicate=True),
         Input("chart-select-all-sites-button", "n_clicks"),
         Input("chart-clear-sites-button", "n_clicks"),
         State("chart-site-select", "options"),

@@ -78,3 +78,15 @@ def test_latest_by_site_has_no_entry_when_every_row_is_excluded(tmp_path, monkey
         cutoffs = ReconductoringRepository().latest_by_site()
 
         assert SITE_A not in cutoffs
+
+
+def test_list_events_filters_by_noise_site_id(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
+    with app.app_context():
+        db.session.add(_event(SITE_A, date(2022, 1, 1)))
+        db.session.add(_event(SITE_B, date(2023, 3, 15)))
+        db.session.commit()
+
+        scoped = ReconductoringRepository().list_events(noise_site_id=SITE_A)
+
+        assert [event.noise_site_id for event in scoped] == [SITE_A]

@@ -11,6 +11,7 @@ COLUMN_DEFS = [
     ("Site name", "site_name", "text"),
     ("Site code", "site_code", "text"),
     ("Plot colour", "plot_color", "text"),
+    ("Historical line colour", "historical_line_color", "text"),
     ("Height adjustment (dB)", "height_adj_db", "numeric"),
     ("Data folder", "data_folder", "text"),
     ("Report folder", "report_folder", "text"),

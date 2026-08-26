@@ -64,13 +64,20 @@ class ReadingRepository:
         # smaller processed_reading-derived aggregates do. Sector bucketing
         # (floor((direction + 11.25) / 22.5) % 16) is portable SQLAlchemy
         # Core, not a raw SQL string, so it compiles correctly on both
-        # SQLite (tests) and MySQL (prod).
+        # SQLite (tests) and MySQL (prod). Grouped by (site, year, month,
+        # sector) rather than pre-collapsed across history so a date range
+        # can be re-aggregated on the fly later (see
+        # site_climate_service.get_wind_rose).
         sector_index = (sa.func.floor((Reading.wind_direction + 11.25) / 22.5) % 16).label(
             "sector_index"
         )
+        year = sa.extract("year", Reading.datetime).label("year")
+        month = sa.extract("month", Reading.datetime).label("month")
         query = (
             db.session.query(
                 Reading.noise_site_id,
+                year,
+                month,
                 sector_index,
                 sa.func.count(Reading.noise_site_id).label("sample_count"),
                 sa.func.avg(Reading.wind_speed).label("avg_wind_speed"),
@@ -81,11 +88,13 @@ class ReadingRepository:
         )
         if noise_site_id:
             query = query.filter(Reading.noise_site_id.in_(noise_site_id))
-        query = query.group_by(Reading.noise_site_id, sector_index)
+        query = query.group_by(Reading.noise_site_id, year, month, sector_index)
 
         return [
             {
                 "noise_site_id": row.noise_site_id,
+                "year": int(row.year),
+                "month": int(row.month),
                 "direction_sector": DIRECTION_SECTORS[int(row.sector_index)],
                 "sample_count": row.sample_count,
                 "avg_wind_speed": float(row.avg_wind_speed),
@@ -94,15 +103,16 @@ class ReadingRepository:
         ]
 
     def aggregate_monthly_rainfall(self, noise_site_id=None):
-        # Climatological - grouped by calendar month only (not year), so two
-        # different years' Januaries combine into one month=1 row. total_rain
-        # is the cumulative sum of every qualifying reading in that bucket -
-        # i.e. the total rainfall recorded during that calendar month across
-        # the site's full history, not any single year's total.
+        # Grouped by (site, year, month) - a single calendar month, not
+        # collapsed across years. total_rain is the cumulative sum of every
+        # qualifying reading in that bucket - i.e. the total rainfall
+        # recorded during that single calendar month.
+        year = sa.extract("year", Reading.datetime).label("year")
         month = sa.extract("month", Reading.datetime).label("month")
         query = (
             db.session.query(
                 Reading.noise_site_id,
+                year,
                 month,
                 sa.func.avg(Reading.rain_mm).label("avg_rain_mm"),
                 sa.func.sum(Reading.rain_mm).label("total_rain"),
@@ -113,15 +123,72 @@ class ReadingRepository:
         )
         if noise_site_id:
             query = query.filter(Reading.noise_site_id.in_(noise_site_id))
-        query = query.group_by(Reading.noise_site_id, month)
+        query = query.group_by(Reading.noise_site_id, year, month)
 
         return [
             {
                 "noise_site_id": row.noise_site_id,
+                "year": int(row.year),
                 "month": int(row.month),
                 "avg_rain_mm": float(row.avg_rain_mm),
                 "total_rain": float(row.total_rain),
                 "sample_count": row.sample_count,
+            }
+            for row in query.all()
+        ]
+
+    def aggregate_monthly_weather_stats(self, noise_site_id=None):
+        # Grouped by (site, year, month) - min/max/avg rainfall and wind
+        # speed for that single calendar month, computed in one pass over
+        # reading (rather than one query per metric) via a conditional
+        # (CASE WHEN) expression per metric, so each aggregate only sees
+        # values that pass its own plausibility filter while sample_count
+        # still reflects every reading row in the bucket.
+        year = sa.extract("year", Reading.datetime).label("year")
+        month = sa.extract("month", Reading.datetime).label("month")
+        valid_rain = sa.and_(
+            Reading.rain_mm.isnot(None), Reading.rain_mm < self.MAX_PLAUSIBLE_RAIN_MM
+        )
+        valid_wind = sa.and_(
+            Reading.wind_speed.isnot(None), Reading.wind_speed < self.MAX_PLAUSIBLE_WIND_SPEED
+        )
+        rain_value = sa.case((valid_rain, Reading.rain_mm))
+        wind_value = sa.case((valid_wind, Reading.wind_speed))
+
+        query = db.session.query(
+            Reading.noise_site_id,
+            year,
+            month,
+            sa.func.count(Reading.noise_site_id).label("sample_count"),
+            sa.func.min(rain_value).label("min_rain_mm"),
+            sa.func.max(rain_value).label("max_rain_mm"),
+            sa.func.avg(rain_value).label("avg_rain_mm"),
+            sa.func.min(wind_value).label("min_wind_speed"),
+            sa.func.max(wind_value).label("max_wind_speed"),
+            sa.func.avg(wind_value).label("avg_wind_speed"),
+        )
+        if noise_site_id:
+            query = query.filter(Reading.noise_site_id.in_(noise_site_id))
+        query = query.group_by(Reading.noise_site_id, year, month)
+
+        return [
+            {
+                "noise_site_id": row.noise_site_id,
+                "year": int(row.year),
+                "month": int(row.month),
+                "sample_count": row.sample_count,
+                "min_rain_mm": float(row.min_rain_mm) if row.min_rain_mm is not None else None,
+                "max_rain_mm": float(row.max_rain_mm) if row.max_rain_mm is not None else None,
+                "avg_rain_mm": float(row.avg_rain_mm) if row.avg_rain_mm is not None else None,
+                "min_wind_speed": (
+                    float(row.min_wind_speed) if row.min_wind_speed is not None else None
+                ),
+                "max_wind_speed": (
+                    float(row.max_wind_speed) if row.max_wind_speed is not None else None
+                ),
+                "avg_wind_speed": (
+                    float(row.avg_wind_speed) if row.avg_wind_speed is not None else None
+                ),
             }
             for row in query.all()
         ]

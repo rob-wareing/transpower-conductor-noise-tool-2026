@@ -26,6 +26,59 @@ INCLUDE_DRY_OPTIONS = [
     {"label": "False", "value": False},
 ]
 
+# The Sites box, shared shape across every Trends sub-tab and the Charts
+# tab's own "Sites" panel (see layout/charts.py) - a dedicated
+# dropdown-with-bulk-select box rather than inline with the other filters,
+# since site selection is usually the first/most-used filter and benefits
+# from more room.
+SITES_CARD_STYLE = {
+    "minWidth": "600px",
+    "maxWidth": "650px",
+    "minHeight": "500px",
+    "flex": "1",
+}
+FILTER_ROW_STYLE = {
+    "display": "flex",
+    "flexWrap": "wrap",
+    "gap": "1rem",
+    "marginBottom": "1rem",
+    "alignItems": "flex-start",
+}
+
+
+def _sites_card(dropdown_id, select_all_id, clear_id):
+    return dbc.Card(
+        [
+            dbc.CardHeader("Sites"),
+            dbc.CardBody(
+                [
+                    dcc.Dropdown(id=dropdown_id, multi=True, className="chart-site-select-wide"),
+                    html.Div(
+                        [
+                            dbc.Button(
+                                "Select all",
+                                id=select_all_id,
+                                color="secondary",
+                                size="sm",
+                                n_clicks=0,
+                            ),
+                            dbc.Button(
+                                "Clear",
+                                id=clear_id,
+                                color="secondary",
+                                outline=True,
+                                size="sm",
+                                n_clicks=0,
+                            ),
+                        ],
+                        style={"display": "flex", "gap": "0.5rem", "marginTop": "0.75rem"},
+                    ),
+                ]
+            ),
+        ],
+        style=SITES_CARD_STYLE,
+    )
+
 
 def _rain_rate_vs_level_panel():
     return html.Div(
@@ -37,49 +90,52 @@ def _rain_rate_vs_level_panel():
                 [
                     html.Div(
                         [
-                            html.Label("Detection logic"),
-                            dcc.Dropdown(
-                                id="trends-rain-rate-detection-logic",
-                                options=DETECTION_LOGIC_OPTIONS,
-                                value="original",
-                                clearable=False,
+                            html.Div(
+                                [
+                                    html.Label("Detection logic"),
+                                    dcc.Dropdown(
+                                        id="trends-rain-rate-detection-logic",
+                                        options=DETECTION_LOGIC_OPTIONS,
+                                        value="original",
+                                        clearable=False,
+                                    ),
+                                ],
+                                style={"marginBottom": "1rem"},
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Metric"),
+                                    dcc.Dropdown(
+                                        id="trends-rain-rate-metric",
+                                        options=METRIC_OPTIONS,
+                                        value="l90",
+                                        clearable=False,
+                                    ),
+                                ],
+                                style={"marginBottom": "1rem"},
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Include dry"),
+                                    dcc.Dropdown(
+                                        id="trends-rain-rate-include-dry",
+                                        options=INCLUDE_DRY_OPTIONS,
+                                        value=False,
+                                        clearable=False,
+                                    ),
+                                ],
+                                style={"marginBottom": "1rem"},
                             ),
                         ],
-                        style={"minWidth": "220px"},
+                        style={"flex": "1", "minWidth": "0"},
                     ),
-                    html.Div(
-                        [
-                            html.Label("Metric"),
-                            dcc.Dropdown(
-                                id="trends-rain-rate-metric",
-                                options=METRIC_OPTIONS,
-                                value="l90",
-                                clearable=False,
-                            ),
-                        ],
-                        style={"minWidth": "180px"},
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Sites"),
-                            dcc.Dropdown(id="trends-rain-rate-site-select", multi=True),
-                        ],
-                        style={"minWidth": "400px", "maxWidth": "700px"},
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Include dry"),
-                            dcc.Dropdown(
-                                id="trends-rain-rate-include-dry",
-                                options=INCLUDE_DRY_OPTIONS,
-                                value=False,
-                                clearable=False,
-                            ),
-                        ],
-                        style={"minWidth": "130px"},
+                    _sites_card(
+                        "trends-rain-rate-site-select",
+                        "trends-rain-rate-select-all-sites-button",
+                        "trends-rain-rate-clear-sites-button",
                     ),
                 ],
-                style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
+                style=FILTER_ROW_STYLE,
             ),
             html.Div(
                 dbc.Button(
@@ -106,49 +162,52 @@ def _conductor_summary_panel():
                 [
                     html.Div(
                         [
-                            html.Label("Metric"),
-                            dcc.Dropdown(
-                                id="trends-conductor-summary-metric",
-                                options=METRIC_OPTIONS,
-                                value="l90",
-                                clearable=False,
+                            html.Div(
+                                [
+                                    html.Label("Metric"),
+                                    dcc.Dropdown(
+                                        id="trends-conductor-summary-metric",
+                                        options=METRIC_OPTIONS,
+                                        value="l90",
+                                        clearable=False,
+                                    ),
+                                ],
+                                style={"marginBottom": "1rem"},
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Detection logic"),
+                                    dcc.Dropdown(
+                                        id="trends-conductor-summary-detection-logic",
+                                        options=DETECTION_LOGIC_OPTIONS,
+                                        value="original",
+                                        clearable=False,
+                                    ),
+                                ],
+                                style={"marginBottom": "1rem"},
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Measurement duration"),
+                                    dcc.Dropdown(
+                                        id="trends-conductor-summary-duration",
+                                        options=MEASUREMENT_DURATION_OPTIONS,
+                                        value=15,
+                                        clearable=False,
+                                    ),
+                                ],
+                                style={"marginBottom": "1rem"},
                             ),
                         ],
-                        style={"minWidth": "180px"},
+                        style={"flex": "1", "minWidth": "0"},
                     ),
-                    html.Div(
-                        [
-                            html.Label("Detection logic"),
-                            dcc.Dropdown(
-                                id="trends-conductor-summary-detection-logic",
-                                options=DETECTION_LOGIC_OPTIONS,
-                                value="original",
-                                clearable=False,
-                            ),
-                        ],
-                        style={"minWidth": "220px"},
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Measurement duration"),
-                            dcc.Dropdown(
-                                id="trends-conductor-summary-duration",
-                                options=MEASUREMENT_DURATION_OPTIONS,
-                                value=15,
-                                clearable=False,
-                            ),
-                        ],
-                        style={"minWidth": "180px"},
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Sites"),
-                            dcc.Dropdown(id="trends-conductor-summary-site-select", multi=True),
-                        ],
-                        style={"minWidth": "400px", "maxWidth": "700px"},
+                    _sites_card(
+                        "trends-conductor-summary-site-select",
+                        "trends-conductor-summary-select-all-sites-button",
+                        "trends-conductor-summary-clear-sites-button",
                     ),
                 ],
-                style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
+                style=FILTER_ROW_STYLE,
             ),
             dcc.Graph(id="trends-conductor-summary-chart"),
         ]
@@ -165,37 +224,40 @@ def _age_effects_panel():
                 [
                     html.Div(
                         [
-                            html.Label("Detection logic"),
-                            dcc.Dropdown(
-                                id="trends-age-effects-detection-logic",
-                                options=DETECTION_LOGIC_OPTIONS,
-                                value="original",
-                                clearable=False,
+                            html.Div(
+                                [
+                                    html.Label("Detection logic"),
+                                    dcc.Dropdown(
+                                        id="trends-age-effects-detection-logic",
+                                        options=DETECTION_LOGIC_OPTIONS,
+                                        value="original",
+                                        clearable=False,
+                                    ),
+                                ],
+                                style={"marginBottom": "1rem"},
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Metric"),
+                                    dcc.Dropdown(
+                                        id="trends-age-effects-metric",
+                                        options=METRIC_OPTIONS,
+                                        value="l90",
+                                        clearable=False,
+                                    ),
+                                ],
+                                style={"marginBottom": "1rem"},
                             ),
                         ],
-                        style={"minWidth": "220px"},
+                        style={"flex": "1", "minWidth": "0"},
                     ),
-                    html.Div(
-                        [
-                            html.Label("Metric"),
-                            dcc.Dropdown(
-                                id="trends-age-effects-metric",
-                                options=METRIC_OPTIONS,
-                                value="l90",
-                                clearable=False,
-                            ),
-                        ],
-                        style={"minWidth": "180px"},
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Sites"),
-                            dcc.Dropdown(id="trends-age-effects-site-select", multi=True),
-                        ],
-                        style={"minWidth": "400px", "maxWidth": "700px"},
+                    _sites_card(
+                        "trends-age-effects-site-select",
+                        "trends-age-effects-select-all-sites-button",
+                        "trends-age-effects-clear-sites-button",
                     ),
                 ],
-                style={"display": "flex", "gap": "1rem", "marginBottom": "1rem"},
+                style=FILTER_ROW_STYLE,
             ),
             html.Div(
                 dbc.Button(

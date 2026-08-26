@@ -312,6 +312,9 @@ def test_charts_endpoint_overlays_historical_results_before_cutover(tmp_path, mo
     # Site 115 has both ProcessedReading rows (2025) and HistoricalResult rows
     # (up to 2019) - the historical points should appear alongside the bucketed
     # current-data points, since none of the current data predates the cutover.
+    # They render as two separate traces (the historical one at reduced
+    # opacity - see the historical/current trace-splitting in
+    # chart_service._build_noise_chart), sharing one legend entry.
     without_historical = client.post(
         "/api/charts", json={"noise_site_id": [999999], "show_historical": True}
     )
@@ -322,10 +325,86 @@ def test_charts_endpoint_overlays_historical_results_before_cutover(tmp_path, mo
     assert without_historical.status_code == 200
     assert with_historical.status_code == 200
 
-    payload = with_historical.get_json()["noise_chart"]["data"][0]
-    dates = payload["x"]
-    assert any(str(d).startswith("2019") or str(d).startswith("2016") for d in dates)
-    assert any(str(d).startswith("2025") for d in dates)
+    traces = with_historical.get_json()["noise_chart"]["data"]
+    assert len(traces) == 2
+    all_dates = [d for trace in traces for d in trace["x"]]
+    assert any(str(d).startswith("2019") or str(d).startswith("2016") for d in all_dates)
+    assert any(str(d).startswith("2025") for d in all_dates)
+
+    historical_trace, current_trace = traces
+    assert historical_trace.get("opacity") == 0.5
+    assert current_trace.get("opacity") in (None, 1.0)
+    assert historical_trace["legendgroup"] == current_trace["legendgroup"]
+    assert historical_trace["showlegend"] is True
+    assert current_trace["showlegend"] is False
+
+
+def test_charts_endpoint_historical_trace_defaults_to_current_traces_own_color(
+    tmp_path, monkeypatch
+):
+    client = _make_client(tmp_path, monkeypatch)
+
+    # Site 115's historical_line_color is unset (the AUTO_SEED_DATA baseline
+    # never sets it) - its historical trace should fall back to reusing the
+    # same color its current-data trace uses, not some other color.
+    response = client.post(
+        "/api/charts", json={"noise_site_id": [115], "show_historical": True}
+    )
+
+    assert response.status_code == 200
+    historical_trace, current_trace = response.get_json()["noise_chart"]["data"]
+    assert historical_trace["line"]["color"] == current_trace["line"]["color"]
+
+
+def test_charts_endpoint_historical_trace_uses_sites_historical_line_color_override(
+    tmp_path, monkeypatch
+):
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    with app.app_context():
+        site = Site.query.filter_by(noise_site_id=115).first()
+        site.historical_line_color = "#ff00ff"
+        db.session.commit()
+
+    response = client.post(
+        "/api/charts", json={"noise_site_id": [115], "show_historical": True}
+    )
+
+    assert response.status_code == 200
+    historical_trace, current_trace = response.get_json()["noise_chart"]["data"]
+    assert historical_trace["line"]["color"] == "#ff00ff"
+    assert current_trace["line"]["color"] != "#ff00ff"
+
+
+def test_charts_endpoint_applies_reconductoring_linestyle_from_its_date_onward(
+    tmp_path, monkeypatch
+):
+    from datetime import date as date_
+
+    from transpower_conductor_noise_tool_2026.backend.persistence.models.reconductoring import (
+        Reconductoring,
+    )
+
+    app, client = _make_app_and_client(tmp_path, monkeypatch)
+    with app.app_context():
+        # Site 51's 50 seeded daily readings span 2025-02-17 to 2025-04-07
+        # (see test_charts_endpoint_conductor_and_treatment_filter_splits_trace_name) -
+        # this cutover sits roughly in the middle, giving both a solid
+        # (pre-cutover) and a dash (post-cutover) segment.
+        db.session.add(
+            Reconductoring(
+                noise_site_id=51,
+                reconductoring_date=date_(2025, 3, 1),
+                plot_linestyle="dash",
+            )
+        )
+        db.session.commit()
+
+    response = client.post("/api/charts", json={"noise_site_id": [51]})
+
+    assert response.status_code == 200
+    traces = response.get_json()["noise_chart"]["data"]
+    dash_values = {trace["line"]["dash"] for trace in traces}
+    assert dash_values == {"solid", "dash"}
 
 
 def test_charts_endpoint_excludes_historical_results_for_dry_condition(tmp_path, monkeypatch):

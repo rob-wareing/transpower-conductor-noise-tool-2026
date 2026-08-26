@@ -1,9 +1,10 @@
 """One-off / repeatable: (re)generate the wind_rose table from the current
 reading table's full history.
 
-For each site, groups the site's full raw reading history into 16 compass
-sectors (22.5 degrees each, centered on N/NNE/.../NNW) and computes
-sample_count + average wind_speed per sector, via a single set-based GROUP BY
+For each site and each (year, month) of its history, groups the matching raw
+readings into 16 compass sectors (22.5 degrees each, centered on
+N/NNE/.../NNW) and computes sample_count + average wind_speed per sector,
+via a single set-based GROUP BY
 query (see ReadingRepository.aggregate_wind_rose) rather than pulling raw
 rows into pandas - reading is a ~2.4M-row table, far too large for the
 per-row-into-DataFrame pattern generate_conductor_summary.py/
@@ -49,9 +50,13 @@ def main():
             print("No reading rows have both wind_speed and wind_direction - nothing to summarize.")
             return
 
-        for record in sorted(records, key=lambda r: (r["noise_site_id"], r["direction_sector"])):
+        for record in sorted(
+            records,
+            key=lambda r: (r["noise_site_id"], r["year"], r["month"], r["direction_sector"]),
+        ):
             print(
-                f"site={record['noise_site_id']} sector={record['direction_sector']}: "
+                f"site={record['noise_site_id']} {record['year']}-{record['month']:02d} "
+                f"sector={record['direction_sector']}: "
                 f"n={record['sample_count']}, avg_wind_speed={record['avg_wind_speed']}"
             )
 

@@ -41,6 +41,26 @@ def test_list_all_returns_every_site_ordered(tmp_path, monkeypatch):
         assert [row.noise_site_id for row in rows] == [SITE_A, SITE_B]
 
 
+def test_find_by_site_returns_matching_row(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
+    with app.app_context():
+        db.session.add(_availability(SITE_A, min_datetime=datetime(2019, 1, 1)))
+        db.session.add(_availability(SITE_B))
+        db.session.commit()
+
+        found = ReadingAvailabilityRepository().find_by_site(SITE_A)
+
+        assert found is not None
+        assert found.noise_site_id == SITE_A
+        assert found.min_datetime == datetime(2019, 1, 1)
+
+
+def test_find_by_site_returns_none_for_unknown_site(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
+    with app.app_context():
+        assert ReadingAvailabilityRepository().find_by_site(SITE_A) is None
+
+
 def test_replace_all_fully_replaces_prior_contents(tmp_path, monkeypatch):
     app = _make_app(tmp_path, monkeypatch)
     with app.app_context():

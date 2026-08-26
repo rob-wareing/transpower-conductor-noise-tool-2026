@@ -1,4 +1,5 @@
-from dash import Input, Output
+import dash
+from dash import Input, Output, State
 
 from transpower_conductor_noise_tool_2026.shared.contracts import (
     AgeEffectsFilters,
@@ -7,6 +8,15 @@ from transpower_conductor_noise_tool_2026.shared.contracts import (
 )
 
 from ..client import BackendClient
+
+
+def _bulk_select_value(select_all_button_id, options):
+    # One click selects every currently-listed site (or clears the
+    # selection) instead of clicking each site in the dropdown individually
+    # - same pattern as charts.py's bulk_select_sites.
+    if dash.ctx.triggered_id == select_all_button_id:
+        return [option["value"] for option in options or []]
+    return []
 
 
 def _is_hide_data_active(n_clicks):
@@ -37,16 +47,30 @@ def register_callbacks(dash_app, backend_url: str | None):
 
     @dash_app.callback(
         Output("trends-rain-rate-site-select", "options"),
+        Output("trends-rain-rate-site-select", "value"),
         Input("trends-rain-rate-init", "n_intervals"),
     )
     def populate_rain_rate_site_options(_n_intervals):
         if client is None:
-            return []
+            return [], []
 
-        return [
+        options = [
             {"label": f"({site.noise_site_id}) {site.site_name}", "value": site.noise_site_id}
             for site in client.get_sites()
         ]
+        # Pre-select every site on initial load - same as the Charts tab's
+        # own Sites box (see callbacks/charts.py::populate_site_options).
+        return options, [option["value"] for option in options]
+
+    @dash_app.callback(
+        Output("trends-rain-rate-site-select", "value", allow_duplicate=True),
+        Input("trends-rain-rate-select-all-sites-button", "n_clicks"),
+        Input("trends-rain-rate-clear-sites-button", "n_clicks"),
+        State("trends-rain-rate-site-select", "options"),
+        prevent_initial_call=True,
+    )
+    def bulk_select_rain_rate_sites(_select_all_clicks, _clear_clicks, options):
+        return _bulk_select_value("trends-rain-rate-select-all-sites-button", options)
 
     @dash_app.callback(
         Output("trends-rain-rate-hide-data-button", "children"),
@@ -84,16 +108,30 @@ def register_callbacks(dash_app, backend_url: str | None):
 
     @dash_app.callback(
         Output("trends-conductor-summary-site-select", "options"),
+        Output("trends-conductor-summary-site-select", "value"),
         Input("trends-conductor-summary-init", "n_intervals"),
     )
     def populate_conductor_summary_site_options(_n_intervals):
         if client is None:
-            return []
+            return [], []
 
-        return [
+        options = [
             {"label": f"({site.noise_site_id}) {site.site_name}", "value": site.noise_site_id}
             for site in client.get_sites()
         ]
+        # Pre-select every site on initial load - same as the Charts tab's
+        # own Sites box (see callbacks/charts.py::populate_site_options).
+        return options, [option["value"] for option in options]
+
+    @dash_app.callback(
+        Output("trends-conductor-summary-site-select", "value", allow_duplicate=True),
+        Input("trends-conductor-summary-select-all-sites-button", "n_clicks"),
+        Input("trends-conductor-summary-clear-sites-button", "n_clicks"),
+        State("trends-conductor-summary-site-select", "options"),
+        prevent_initial_call=True,
+    )
+    def bulk_select_conductor_summary_sites(_select_all_clicks, _clear_clicks, options):
+        return _bulk_select_value("trends-conductor-summary-select-all-sites-button", options)
 
     @dash_app.callback(
         Output("trends-conductor-summary-chart", "figure"),
@@ -120,16 +158,30 @@ def register_callbacks(dash_app, backend_url: str | None):
 
     @dash_app.callback(
         Output("trends-age-effects-site-select", "options"),
+        Output("trends-age-effects-site-select", "value"),
         Input("trends-age-effects-init", "n_intervals"),
     )
     def populate_age_effects_site_options(_n_intervals):
         if client is None:
-            return []
+            return [], []
 
-        return [
+        options = [
             {"label": f"({site.noise_site_id}) {site.site_name}", "value": site.noise_site_id}
             for site in client.get_sites()
         ]
+        # Pre-select every site on initial load - same as the Charts tab's
+        # own Sites box (see callbacks/charts.py::populate_site_options).
+        return options, [option["value"] for option in options]
+
+    @dash_app.callback(
+        Output("trends-age-effects-site-select", "value", allow_duplicate=True),
+        Input("trends-age-effects-select-all-sites-button", "n_clicks"),
+        Input("trends-age-effects-clear-sites-button", "n_clicks"),
+        State("trends-age-effects-site-select", "options"),
+        prevent_initial_call=True,
+    )
+    def bulk_select_age_effects_sites(_select_all_clicks, _clear_clicks, options):
+        return _bulk_select_value("trends-age-effects-select-all-sites-button", options)
 
     @dash_app.callback(
         Output("trends-age-effects-hide-data-button", "children"),

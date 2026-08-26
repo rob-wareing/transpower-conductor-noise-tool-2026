@@ -12,6 +12,7 @@ from transpower_conductor_noise_tool_2026.shared.contracts import (
     HistoricalResultDetail,
     HistoricalResultUpdate,
     MonthlyRainfall,
+    MonthlyWeatherStats,
     OutageCreate,
     OutageDetail,
     OutageUpdate,
@@ -20,6 +21,7 @@ from transpower_conductor_noise_tool_2026.shared.contracts import (
     ReconductoringCreate,
     ReconductoringDetail,
     ReconductoringUpdate,
+    SiteActivitySummary,
     SiteDetail,
     SiteSummary,
     SiteUpdate,
@@ -63,17 +65,42 @@ class BackendClient:
         response.raise_for_status()
         return [SiteDetail.model_validate(item) for item in response.json()["items"]]
 
-    def get_wind_rose(self, noise_site_id: int):
-        response = requests.get(f"{self.base_url}/api/sites/{noise_site_id}/wind-rose", timeout=10)
+    def get_wind_rose(self, noise_site_id: int, start: str | None = None, end: str | None = None):
+        params = {k: v for k, v in {"start": start, "end": end}.items() if v}
+        response = requests.get(
+            f"{self.base_url}/api/sites/{noise_site_id}/wind-rose", params=params, timeout=10
+        )
         response.raise_for_status()
         return [WindRoseSector.model_validate(item) for item in response.json()["items"]]
 
-    def get_monthly_rainfall(self, noise_site_id: int):
+    def get_monthly_rainfall(
+        self, noise_site_id: int, start: str | None = None, end: str | None = None
+    ):
+        params = {k: v for k, v in {"start": start, "end": end}.items() if v}
         response = requests.get(
-            f"{self.base_url}/api/sites/{noise_site_id}/monthly-rainfall", timeout=10
+            f"{self.base_url}/api/sites/{noise_site_id}/monthly-rainfall",
+            params=params,
+            timeout=10,
         )
         response.raise_for_status()
         return [MonthlyRainfall.model_validate(item) for item in response.json()["items"]]
+
+    def get_monthly_weather_stats(
+        self, noise_site_id: int, start: str | None = None, end: str | None = None
+    ):
+        params = {k: v for k, v in {"start": start, "end": end}.items() if v}
+        response = requests.get(
+            f"{self.base_url}/api/sites/{noise_site_id}/monthly-weather-stats",
+            params=params,
+            timeout=10,
+        )
+        response.raise_for_status()
+        return [MonthlyWeatherStats.model_validate(item) for item in response.json()["items"]]
+
+    def get_site_summary(self, noise_site_id: int):
+        response = requests.get(f"{self.base_url}/api/sites/{noise_site_id}/summary", timeout=10)
+        response.raise_for_status()
+        return SiteActivitySummary.model_validate(response.json())
 
     def update_site(self, noise_site_id: int, update: SiteUpdate, cookies):
         return requests.patch(

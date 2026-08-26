@@ -101,6 +101,23 @@ class ProcessedReadingRepository:
             for row in query.all()
         ]
 
+    def count_by_detection_logic(self, noise_site_id, include=True):
+        # {"original": N, "updated_2026": M} for one site - a detection_logic
+        # value with zero qualifying rows is still present in the result as
+        # 0, unlike the GROUP BY aggregates elsewhere in this repository,
+        # since callers (the Locations tab's per-site summary) want both
+        # counts every time, not just the ones that happen to be non-zero.
+        query = db.session.query(
+            ProcessedReading.detection_logic, func.count(ProcessedReading.id)
+        ).filter(ProcessedReading.noise_site_id == noise_site_id)
+        if include is not None:
+            query = query.filter(ProcessedReading.include == include)
+        counts = dict(query.group_by(ProcessedReading.detection_logic).all())
+        return {
+            "original": counts.get("original", 0),
+            "updated_2026": counts.get("updated_2026", 0),
+        }
+
     def find_by_id(self, reading_id):
         return db.session.get(ProcessedReading, reading_id)
 

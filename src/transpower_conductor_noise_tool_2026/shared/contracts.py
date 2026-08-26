@@ -22,6 +22,7 @@ class SiteDetail(BaseModel):
     site_name: str
     site_code: str | None = None
     plot_color: str | None = None
+    historical_line_color: str | None = None
     height_adj_db: float = 0
     data_folder: str | None = None
     report_folder: str | None = None
@@ -33,6 +34,7 @@ class SiteDetail(BaseModel):
 class SiteUpdate(BaseModel):
     site_code: str | None = None
     plot_color: str | None = None
+    historical_line_color: str | None = None
     height_adj_db: float | None = None
     data_folder: str | None = None
     report_folder: str | None = None
@@ -46,6 +48,13 @@ class SiteUpdate(BaseModel):
         if value is None or HEX_COLOR_PATTERN.match(value):
             return value
         raise ValueError("plot_color must be a hex color like #aabbcc")
+
+    @field_validator("historical_line_color")
+    @classmethod
+    def validate_historical_line_color(cls, value):
+        if value is None or HEX_COLOR_PATTERN.match(value):
+            return value
+        raise ValueError("historical_line_color must be a hex color like #aabbcc")
 
     @field_validator("latitude")
     @classmethod
@@ -268,6 +277,7 @@ class ReconductoringDetail(BaseModel):
     conductor_and_treatment: str | None = None
     grease: str | None = None
     reconductoring_date: date
+    plot_linestyle: str | None = None
     notes: str | None = None
     for_reconductoring_age: bool = True
 
@@ -277,6 +287,7 @@ class ReconductoringCreate(BaseModel):
     conductor_and_treatment: str | None = None
     grease: str | None = None
     reconductoring_date: date
+    plot_linestyle: str | None = None
     notes: str | None = None
     for_reconductoring_age: bool = True
 
@@ -285,6 +296,7 @@ class ReconductoringUpdate(BaseModel):
     conductor_and_treatment: str | None = None
     grease: str | None = None
     reconductoring_date: date | None = None
+    plot_linestyle: str | None = None
     notes: str | None = None
     for_reconductoring_age: bool | None = None
 
@@ -336,4 +348,29 @@ class MonthlyRainfall(BaseModel):
     month: int
     avg_rain_mm: float
     total_rain: float
+    sample_count: int
+
+
+class SiteActivitySummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    reconductoring_events: List[ReconductoringDetail]
+    outages: List[OutageDetail]
+    availability_start: datetime | None = None
+    availability_end: datetime | None = None
+    detected_event_count_original: int
+    detected_event_count_updated_2026: int
+
+
+class MonthlyWeatherStats(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    year: int
+    month: int
+    min_rain_mm: float | None = None
+    max_rain_mm: float | None = None
+    avg_rain_mm: float | None = None
+    min_wind_speed: float | None = None
+    max_wind_speed: float | None = None
+    avg_wind_speed: float | None = None
     sample_count: int

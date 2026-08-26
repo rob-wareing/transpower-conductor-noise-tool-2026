@@ -96,6 +96,68 @@ def _build_monthly_rainfall_figure(months):
     return figure
 
 
+def _event_table(headers, rows, empty_message):
+    if not rows:
+        return html.P(empty_message)
+    return html.Table(
+        [html.Thead(html.Tr([html.Th(header) for header in headers]))]
+        + [html.Tbody([html.Tr([html.Td(cell) for cell in row]) for row in rows])],
+        style={"width": "100%", "marginBottom": "1rem"},
+    )
+
+
+def _build_site_activity_panel(summary):
+    # .model_dump(mode="json") first, same as callbacks/outages.py and
+    # callbacks/reconductoring.py's editable tables - Dash components should
+    # get plain JSON-serializable values (ISO date/datetime strings), not
+    # raw date/datetime objects.
+    reconductoring_rows = [event.model_dump(mode="json") for event in summary.reconductoring_events]
+    outage_rows = [outage.model_dump(mode="json") for outage in summary.outages]
+
+    reconductoring_table = _event_table(
+        ["Date", "Conductor & treatment", "Grease", "Notes"],
+        [
+            [
+                row["reconductoring_date"],
+                row["conductor_and_treatment"] or "",
+                row["grease"] or "",
+                row["notes"] or "",
+            ]
+            for row in reconductoring_rows
+        ],
+        "No reconductoring events recorded for this site",
+    )
+    outage_table = _event_table(
+        ["Start", "End", "Type", "Notes"],
+        [
+            [row["start_datetime"], row["end_datetime"], row["outage_type"], row["notes"] or ""]
+            for row in outage_rows
+        ],
+        "No outages recorded for this site",
+    )
+
+    if summary.availability_start and summary.availability_end:
+        availability_text = f"{summary.availability_start} to {summary.availability_end}"
+    else:
+        availability_text = "No processed reading data available"
+
+    return html.Div(
+        [
+            html.H5("Reconductoring events"),
+            reconductoring_table,
+            html.H5("Outages"),
+            outage_table,
+            html.H5("Data availability"),
+            html.P(availability_text),
+            html.H5("Detected events"),
+            html.P(
+                f"Original: {summary.detected_event_count_original}, "
+                f"Updated 2026: {summary.detected_event_count_updated_2026}"
+            ),
+        ]
+    )
+
+
 def register_callbacks(dash_app, backend_url: str | None):
     client = BackendClient(backend_url) if backend_url else None
 
@@ -154,33 +216,15 @@ def register_callbacks(dash_app, backend_url: str | None):
         return [item for line in lines for item in (line, html.Br())][:-1]
 
     @dash_app.callback(
-        Output("locations-wind-rose", "figure"),
+        Output("site-activity-panel", "children"),
         Input("locations-map", "clickData"),
     )
-    def update_wind_rose(click_data):
+    def display_site_activity(click_data):
         site_id = _site_id_from_click(click_data)
         if site_id is None:
-            return _empty_figure("Click a site to view its wind rose")
+            return "Click on a site marker to view its activity"
         if client is None:
-            return _empty_figure("No wind data for this site")
+            return "No activity data for this site"
 
-        sectors = client.get_wind_rose(site_id)
-        if not sectors:
-            return _empty_figure("No wind data for this site")
-        return _build_wind_rose_figure(sectors)
-
-    @dash_app.callback(
-        Output("locations-monthly-rainfall", "figure"),
-        Input("locations-map", "clickData"),
-    )
-    def update_monthly_rainfall(click_data):
-        site_id = _site_id_from_click(click_data)
-        if site_id is None:
-            return _empty_figure("Click a site to view its monthly rainfall")
-        if client is None:
-            return _empty_figure("No rainfall data for this site")
-
-        months = client.get_monthly_rainfall(site_id)
-        if not months:
-            return _empty_figure("No rainfall data for this site")
-        return _build_monthly_rainfall_figure(months)
+        summary = client.get_site_summary(site_id)
+        return _build_site_activity_panel(summary)

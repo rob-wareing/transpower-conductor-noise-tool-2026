@@ -52,16 +52,18 @@ def _event(**overrides):
     return ReconductoringDetail(**fields)
 
 
-# --- EDITABLE_FIELDS never exposes conductor/plot_linestyle ---------------
+# --- EDITABLE_FIELDS never exposes conductor -------------------------------
 
 
 def test_editable_fields_never_expose_hidden_model_only_columns():
-    # `conductor` and `plot_linestyle` exist on the Reconductoring model for
-    # schema fidelity with the old app, but neither the old UI nor this one
-    # ever showed/edited them - guard against either leaking into the
-    # editable table (and from there, into a create/update payload).
+    # `conductor` exists on the Reconductoring model for schema fidelity with
+    # the old app, but neither the old UI nor this one ever showed/edited it -
+    # guard against it leaking into the editable table (and from there, into
+    # a create/update payload). plot_linestyle is the opposite case - it's
+    # deliberately editable (the "Line style" column, see layout/
+    # reconductoring.py), so it must appear here, not be guarded against.
     assert "conductor" not in reconductoring_callbacks.EDITABLE_FIELDS
-    assert "plot_linestyle" not in reconductoring_callbacks.EDITABLE_FIELDS
+    assert "plot_linestyle" in reconductoring_callbacks.EDITABLE_FIELDS
 
 
 # --- refresh_reconductoring_table -----------------------------------------

@@ -3,6 +3,7 @@ from .conductor_summary import ConductorSummary
 from .grease_description import GreaseDescription
 from .historical_result import HistoricalResult
 from .monthly_rainfall import MonthlyRainfall
+from .monthly_weather_stats import MonthlyWeatherStats
 from .outage import Outage
 from .outage_type import OutageType
 from .processed_reading import ProcessedReading

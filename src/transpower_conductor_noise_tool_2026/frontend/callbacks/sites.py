@@ -10,6 +10,7 @@ from ..client import BackendClient
 EDITABLE_FIELDS = [
     "site_code",
     "plot_color",
+    "historical_line_color",
     "height_adj_db",
     "data_folder",
     "report_folder",

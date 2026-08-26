@@ -197,16 +197,17 @@ If ingestion regularly takes longer than 30 minutes, push the later jobs back fu
 
 ## 9a. Weekly derived-table regeneration
 
-`wind_rose` and `monthly_rainfall` are precomputed from the raw `reading` table's full history (site-level wind rose + climatological monthly average rainfall, shown on the Locations tab when a site is clicked) via a single set-based SQL aggregation each (`ReadingRepository.aggregate_wind_rose`/`aggregate_monthly_rainfall`), not the pandas-based approach the daily `conductor-summary`/`rain-rate-fits` jobs above use — `reading` is a ~2.4M-row table, too large to pull wholesale into pandas the way those two jobs do against the much smaller `processed_reading` table. Both are cheap enough, and change slowly enough, to regenerate weekly rather than daily.
+`wind_rose`, `monthly_rainfall`, and `monthly_weather_stats` are precomputed from the raw `reading` table's full history, each at (site, year, month) granularity (site-level wind rose, monthly rainfall, and monthly min/max/avg rain+wind, shown on the Weather tab for a selected site and date range) via a single set-based SQL aggregation each (`ReadingRepository.aggregate_wind_rose`/`aggregate_monthly_rainfall`/`aggregate_monthly_weather_stats`), not the pandas-based approach the daily `conductor-summary`/`rain-rate-fits` jobs above use — `reading` is a ~2.4M-row table, too large to pull wholesale into pandas the way those two jobs do against the much smaller `processed_reading` table. All three are cheap enough, and change slowly enough, to regenerate weekly rather than daily.
 
 Reuses the same `cron/run.sh` wrapper as the daily jobs above (no new infra needed). Add to the deploy user's crontab (`crontab -e`), clear of the daily jobs' latest possible finish (now `conductor-age-fits` at 3:05am) and staggered from each other:
 
 ```cron
 30 3 * * 0 /opt/transpower-conductor-noise-tool-2026/cron/run.sh wind-rose "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_wind_rose.py"
 45 3 * * 0 /opt/transpower-conductor-noise-tool-2026/cron/run.sh monthly-rainfall "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_monthly_rainfall.py"
+0  4 * * 0 /opt/transpower-conductor-noise-tool-2026/cron/run.sh monthly-weather-stats "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_monthly_weather_stats.py"
 ```
 
-Sunday 3:30am. These read `reading` directly, so they only need the 2am `ingest` job's raw-row upsert to have completed - not any of the derived-`processed_reading` jobs that follow it - but are scheduled after the whole daily chain anyway to keep the crontab simple and avoid any risk of overlapping `db-migrate` container runs on Sundays.
+Sunday 3:30am/3:45am/4:00am. These read `reading` directly, so they only need the 2am `ingest` job's raw-row upsert to have completed - not any of the derived-`processed_reading` jobs that follow it - but are scheduled after the whole daily chain anyway to keep the crontab simple and avoid any risk of overlapping `db-migrate` container runs on Sundays.
 
 ## 9b. Memory/OOM watchdog
 

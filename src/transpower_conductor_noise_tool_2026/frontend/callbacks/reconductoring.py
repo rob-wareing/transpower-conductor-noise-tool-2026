@@ -17,7 +17,14 @@ from ..client import BackendClient
 # treatment would both wrongly null it out on a falsy (0/False) value and
 # break the "is this new row still blank" check (a boolean defaulting True
 # would make every new row look non-blank).
-CORE_EDITABLE_FIELDS = ["noise_site_id", "conductor_and_treatment", "grease", "reconductoring_date", "notes"]
+CORE_EDITABLE_FIELDS = [
+    "noise_site_id",
+    "conductor_and_treatment",
+    "grease",
+    "reconductoring_date",
+    "plot_linestyle",
+    "notes",
+]
 EDITABLE_FIELDS = CORE_EDITABLE_FIELDS + ["for_reconductoring_age"]
 
 

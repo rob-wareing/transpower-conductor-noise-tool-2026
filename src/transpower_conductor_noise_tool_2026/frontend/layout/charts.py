@@ -121,7 +121,7 @@ def content(write_access: bool = False):
                                 ],
                                 style={"display": "flex", "flexWrap": "wrap", "gap": "1rem", "marginBottom": "1rem"},
                             ),
-                            # Row 2b: Aggregation period, Measurement duration
+                            # Row 2b: Aggregation period, Sample Rate
                             html.Div(
                                 [
                                     html.Div(
@@ -138,7 +138,7 @@ def content(write_access: bool = False):
                                     ),
                                     html.Div(
                                         [
-                                            html.Label("Measurement duration"),
+                                            html.Label("Sample Rate"),
                                             dcc.Dropdown(
                                                 id="chart-measurement-duration",
                                                 options=MEASUREMENT_DURATION_OPTIONS,

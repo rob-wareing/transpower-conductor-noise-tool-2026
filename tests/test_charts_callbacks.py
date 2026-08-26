@@ -47,7 +47,7 @@ def test_populate_site_options_formats_label_from_client(fake_client):
 
     response = dispatch_callback(
         app,
-        outputs=[("chart-site-select", "options")],
+        outputs=[("chart-site-select", "options"), ("chart-site-select", "value")],
         inputs=[("chart-init", "n_intervals", 1)],
     )
 
@@ -56,16 +56,33 @@ def test_populate_site_options_formats_label_from_client(fake_client):
     ]
 
 
+def test_populate_site_options_preselects_every_site_on_load(fake_client):
+    fake_client.get_sites.return_value = [
+        SiteSummary(noise_site_id=51, site_name="Demo Site", site_code="DS"),
+        SiteSummary(noise_site_id=137, site_name="Other Site", site_code="OS"),
+    ]
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("chart-site-select", "options"), ("chart-site-select", "value")],
+        inputs=[("chart-init", "n_intervals", 1)],
+    )
+
+    assert output_value(response, "chart-site-select", "value") == [51, 137]
+
+
 def test_populate_site_options_returns_empty_when_no_backend():
     app = _build_app(fake_client=None, backend_url=None)
 
     response = dispatch_callback(
         app,
-        outputs=[("chart-site-select", "options")],
+        outputs=[("chart-site-select", "options"), ("chart-site-select", "value")],
         inputs=[("chart-init", "n_intervals", 1)],
     )
 
     assert output_value(response, "chart-site-select", "options") == []
+    assert output_value(response, "chart-site-select", "value") == []
 
 
 # --- bulk_select_sites ---------------------------------------------------

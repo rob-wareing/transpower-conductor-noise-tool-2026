@@ -1,12 +1,10 @@
 """One-off / repeatable: (re)generate the monthly_rainfall table from the
 current reading table's full history.
 
-For each site, groups the site's full raw reading history by calendar month
-(1-12, climatological - not tied to a year, so every year's January combines
-into one row) and computes sample_count, average rain_mm, and total_rain
-(the cumulative sum of every qualifying reading in that bucket - i.e. total
-rainfall recorded during that calendar month across the site's full history,
-not any single year's total) per month, via a single set-based GROUP BY
+For each site and each (year, month) of its history, computes sample_count,
+average rain_mm, and total_rain (the cumulative sum of every qualifying
+reading in that bucket - i.e. total rainfall recorded during that single
+calendar month) via a single set-based GROUP BY
 query (see ReadingRepository.aggregate_monthly_rainfall)
 rather than pulling raw rows into pandas - reading is a ~2.4M-row table, far
 too large for the per-row-into-DataFrame pattern generate_conductor_summary.py/
@@ -53,9 +51,9 @@ def main():
             print("No reading rows have rain_mm - nothing to summarize.")
             return
 
-        for record in sorted(records, key=lambda r: (r["noise_site_id"], r["month"])):
+        for record in sorted(records, key=lambda r: (r["noise_site_id"], r["year"], r["month"])):
             print(
-                f"site={record['noise_site_id']} month={record['month']}: "
+                f"site={record['noise_site_id']} {record['year']}-{record['month']:02d}: "
                 f"n={record['sample_count']}, avg_rain_mm={record['avg_rain_mm']}, "
                 f"total_rain={record['total_rain']}"
             )

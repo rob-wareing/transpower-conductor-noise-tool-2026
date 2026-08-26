@@ -9,6 +9,7 @@ COLUMN_DEFS = [
     ("Conductor and treatment", "conductor_and_treatment", "text"),
     ("Grease", "grease", "text"),
     ("Reconductoring date", "reconductoring_date", "text"),
+    ("Line style", "plot_linestyle", "text"),
     ("Notes", "notes", "text"),
     ("For reconductoring age (0/1)", "for_reconductoring_age", "numeric"),
 ]

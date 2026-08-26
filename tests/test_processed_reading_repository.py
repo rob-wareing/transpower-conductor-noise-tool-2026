@@ -18,7 +18,7 @@ def _make_app(tmp_path, monkeypatch):
     return create_app({"TESTING": True})
 
 
-def _reading(dt, include):
+def _reading(dt, include, detection_logic="original"):
     return ProcessedReading(
         noise_site_id=KNOWN_SITE,
         datetime=dt,
@@ -30,7 +30,7 @@ def _reading(dt, include):
         is_wet=True,
         include=include,
         measurement_duration_minutes=15,
-        detection_logic="original",
+        detection_logic=detection_logic,
     )
 
 
@@ -176,3 +176,46 @@ def test_aggregate_availability_returns_full_history_per_site_unbounded_by_cap(t
         assert rows[KNOWN_SITE]["max_datetime"] == datetime(2025, 6, 1)
         assert rows[other_site]["min_datetime"] <= datetime(2022, 3, 1)
         assert rows[other_site]["max_datetime"] >= datetime(2022, 3, 1)
+
+
+def test_count_by_detection_logic_counts_each_value_separately(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
+    with app.app_context():
+        # AUTO_SEED_DATA's baseline demo rows are seeded across every site
+        # (see CLAUDE.md's AUTO_SEED_DATA gotcha), so KNOWN_SITE already has
+        # some "original"-logic rows before this test adds any - assert the
+        # delta this test itself introduces, not an absolute count.
+        before = ProcessedReadingRepository().count_by_detection_logic(KNOWN_SITE, include=True)
+
+        db.session.add(_reading(datetime(2030, 1, 1), include=True, detection_logic="original"))
+        db.session.add(_reading(datetime(2030, 1, 2), include=True, detection_logic="original"))
+        db.session.add(
+            _reading(datetime(2030, 1, 3), include=True, detection_logic="updated_2026")
+        )
+        db.session.commit()
+
+        after = ProcessedReadingRepository().count_by_detection_logic(KNOWN_SITE, include=True)
+
+        assert after["original"] == before["original"] + 2
+        assert after["updated_2026"] == before["updated_2026"] + 1
+
+
+def test_count_by_detection_logic_excludes_rows_not_matching_include_filter(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
+    with app.app_context():
+        before = ProcessedReadingRepository().count_by_detection_logic(KNOWN_SITE, include=True)
+
+        db.session.add(_reading(datetime(2030, 2, 1), include=False, detection_logic="original"))
+        db.session.commit()
+
+        after = ProcessedReadingRepository().count_by_detection_logic(KNOWN_SITE, include=True)
+
+        assert after == before
+
+
+def test_count_by_detection_logic_returns_zero_for_site_with_no_matching_rows(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
+    with app.app_context():
+        counts = ProcessedReadingRepository().count_by_detection_logic(999999, include=True)
+
+        assert counts == {"original": 0, "updated_2026": 0}

@@ -42,7 +42,7 @@ def test_populate_rain_rate_site_options_formats_label_from_client(fake_client):
 
     response = dispatch_callback(
         app,
-        outputs=[("trends-rain-rate-site-select", "options")],
+        outputs=[("trends-rain-rate-site-select", "options"), ("trends-rain-rate-site-select", "value")],
         inputs=[("trends-rain-rate-init", "n_intervals", 1)],
     )
 
@@ -50,16 +50,73 @@ def test_populate_rain_rate_site_options_formats_label_from_client(fake_client):
     assert options == [{"label": "(51) Demo Site", "value": 51}]
 
 
+def test_populate_rain_rate_site_options_preselects_every_site_on_load(fake_client):
+    fake_client.get_sites.return_value = [
+        SiteSummary(noise_site_id=51, site_name="Demo Site", site_code="DS"),
+        SiteSummary(noise_site_id=137, site_name="Other Site", site_code="OS"),
+    ]
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-rain-rate-site-select", "options"), ("trends-rain-rate-site-select", "value")],
+        inputs=[("trends-rain-rate-init", "n_intervals", 1)],
+    )
+
+    assert output_value(response, "trends-rain-rate-site-select", "value") == [51, 137]
+
+
 def test_populate_rain_rate_site_options_handles_no_backend():
     app = _build_app(fake_client=None, backend_url=None)
 
     response = dispatch_callback(
         app,
-        outputs=[("trends-rain-rate-site-select", "options")],
+        outputs=[("trends-rain-rate-site-select", "options"), ("trends-rain-rate-site-select", "value")],
         inputs=[("trends-rain-rate-init", "n_intervals", 1)],
     )
 
     assert output_value(response, "trends-rain-rate-site-select", "options") == []
+    assert output_value(response, "trends-rain-rate-site-select", "value") == []
+
+
+# --- bulk_select_rain_rate_sites --------------------------------------------
+
+
+def test_bulk_select_rain_rate_sites_select_all_returns_every_option_value(fake_client):
+    app = _build_app(fake_client)
+    options = [
+        {"label": "(51) Demo Site", "value": 51},
+        {"label": "(137) Other Site", "value": 137},
+    ]
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-rain-rate-site-select", "value")],
+        inputs=[
+            ("trends-rain-rate-select-all-sites-button", "n_clicks", 1),
+            ("trends-rain-rate-clear-sites-button", "n_clicks", 0),
+        ],
+        state=[("trends-rain-rate-site-select", "options", options)],
+    )
+
+    assert output_value(response, "trends-rain-rate-site-select", "value") == [51, 137]
+
+
+def test_bulk_select_rain_rate_sites_clear_returns_empty_list(fake_client):
+    app = _build_app(fake_client)
+    options = [{"label": "(51) Demo Site", "value": 51}]
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-rain-rate-site-select", "value")],
+        inputs=[
+            ("trends-rain-rate-clear-sites-button", "n_clicks", 1),
+            ("trends-rain-rate-select-all-sites-button", "n_clicks", 0),
+        ],
+        state=[("trends-rain-rate-site-select", "options", options)],
+    )
+
+    assert output_value(response, "trends-rain-rate-site-select", "value") == []
 
 
 # --- refresh_rain_rate_chart -------------------------------------------------
@@ -254,7 +311,10 @@ def test_populate_conductor_summary_site_options_formats_label_from_client(fake_
 
     response = dispatch_callback(
         app,
-        outputs=[("trends-conductor-summary-site-select", "options")],
+        outputs=[
+            ("trends-conductor-summary-site-select", "options"),
+            ("trends-conductor-summary-site-select", "value"),
+        ],
         inputs=[("trends-conductor-summary-init", "n_intervals", 1)],
     )
 
@@ -262,16 +322,79 @@ def test_populate_conductor_summary_site_options_formats_label_from_client(fake_
     assert options == [{"label": "(51) Demo Site", "value": 51}]
 
 
+def test_populate_conductor_summary_site_options_preselects_every_site_on_load(fake_client):
+    fake_client.get_sites.return_value = [
+        SiteSummary(noise_site_id=51, site_name="Demo Site", site_code="DS"),
+        SiteSummary(noise_site_id=137, site_name="Other Site", site_code="OS"),
+    ]
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[
+            ("trends-conductor-summary-site-select", "options"),
+            ("trends-conductor-summary-site-select", "value"),
+        ],
+        inputs=[("trends-conductor-summary-init", "n_intervals", 1)],
+    )
+
+    assert output_value(response, "trends-conductor-summary-site-select", "value") == [51, 137]
+
+
 def test_populate_conductor_summary_site_options_handles_no_backend():
     app = _build_app(fake_client=None, backend_url=None)
 
     response = dispatch_callback(
         app,
-        outputs=[("trends-conductor-summary-site-select", "options")],
+        outputs=[
+            ("trends-conductor-summary-site-select", "options"),
+            ("trends-conductor-summary-site-select", "value"),
+        ],
         inputs=[("trends-conductor-summary-init", "n_intervals", 1)],
     )
 
     assert output_value(response, "trends-conductor-summary-site-select", "options") == []
+    assert output_value(response, "trends-conductor-summary-site-select", "value") == []
+
+
+# --- bulk_select_conductor_summary_sites ------------------------------------
+
+
+def test_bulk_select_conductor_summary_sites_select_all_returns_every_option_value(fake_client):
+    app = _build_app(fake_client)
+    options = [
+        {"label": "(51) Demo Site", "value": 51},
+        {"label": "(137) Other Site", "value": 137},
+    ]
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-conductor-summary-site-select", "value")],
+        inputs=[
+            ("trends-conductor-summary-select-all-sites-button", "n_clicks", 1),
+            ("trends-conductor-summary-clear-sites-button", "n_clicks", 0),
+        ],
+        state=[("trends-conductor-summary-site-select", "options", options)],
+    )
+
+    assert output_value(response, "trends-conductor-summary-site-select", "value") == [51, 137]
+
+
+def test_bulk_select_conductor_summary_sites_clear_returns_empty_list(fake_client):
+    app = _build_app(fake_client)
+    options = [{"label": "(51) Demo Site", "value": 51}]
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-conductor-summary-site-select", "value")],
+        inputs=[
+            ("trends-conductor-summary-clear-sites-button", "n_clicks", 1),
+            ("trends-conductor-summary-select-all-sites-button", "n_clicks", 0),
+        ],
+        state=[("trends-conductor-summary-site-select", "options", options)],
+    )
+
+    assert output_value(response, "trends-conductor-summary-site-select", "value") == []
 
 
 # --- refresh_conductor_summary_chart ----------------------------------------
@@ -356,7 +479,7 @@ def test_populate_age_effects_site_options_formats_label_from_client(fake_client
 
     response = dispatch_callback(
         app,
-        outputs=[("trends-age-effects-site-select", "options")],
+        outputs=[("trends-age-effects-site-select", "options"), ("trends-age-effects-site-select", "value")],
         inputs=[("trends-age-effects-init", "n_intervals", 1)],
     )
 
@@ -364,16 +487,73 @@ def test_populate_age_effects_site_options_formats_label_from_client(fake_client
     assert options == [{"label": "(51) Demo Site", "value": 51}]
 
 
+def test_populate_age_effects_site_options_preselects_every_site_on_load(fake_client):
+    fake_client.get_sites.return_value = [
+        SiteSummary(noise_site_id=51, site_name="Demo Site", site_code="DS"),
+        SiteSummary(noise_site_id=137, site_name="Other Site", site_code="OS"),
+    ]
+    app = _build_app(fake_client)
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-age-effects-site-select", "options"), ("trends-age-effects-site-select", "value")],
+        inputs=[("trends-age-effects-init", "n_intervals", 1)],
+    )
+
+    assert output_value(response, "trends-age-effects-site-select", "value") == [51, 137]
+
+
 def test_populate_age_effects_site_options_handles_no_backend():
     app = _build_app(fake_client=None, backend_url=None)
 
     response = dispatch_callback(
         app,
-        outputs=[("trends-age-effects-site-select", "options")],
+        outputs=[("trends-age-effects-site-select", "options"), ("trends-age-effects-site-select", "value")],
         inputs=[("trends-age-effects-init", "n_intervals", 1)],
     )
 
     assert output_value(response, "trends-age-effects-site-select", "options") == []
+    assert output_value(response, "trends-age-effects-site-select", "value") == []
+
+
+# --- bulk_select_age_effects_sites ------------------------------------------
+
+
+def test_bulk_select_age_effects_sites_select_all_returns_every_option_value(fake_client):
+    app = _build_app(fake_client)
+    options = [
+        {"label": "(51) Demo Site", "value": 51},
+        {"label": "(137) Other Site", "value": 137},
+    ]
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-age-effects-site-select", "value")],
+        inputs=[
+            ("trends-age-effects-select-all-sites-button", "n_clicks", 1),
+            ("trends-age-effects-clear-sites-button", "n_clicks", 0),
+        ],
+        state=[("trends-age-effects-site-select", "options", options)],
+    )
+
+    assert output_value(response, "trends-age-effects-site-select", "value") == [51, 137]
+
+
+def test_bulk_select_age_effects_sites_clear_returns_empty_list(fake_client):
+    app = _build_app(fake_client)
+    options = [{"label": "(51) Demo Site", "value": 51}]
+
+    response = dispatch_callback(
+        app,
+        outputs=[("trends-age-effects-site-select", "value")],
+        inputs=[
+            ("trends-age-effects-clear-sites-button", "n_clicks", 1),
+            ("trends-age-effects-select-all-sites-button", "n_clicks", 0),
+        ],
+        state=[("trends-age-effects-site-select", "options", options)],
+    )
+
+    assert output_value(response, "trends-age-effects-site-select", "value") == []
 
 
 # --- refresh_age_effects_chart -----------------------------------------------

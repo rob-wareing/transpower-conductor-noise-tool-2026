@@ -1,4 +1,3 @@
-import dash_bootstrap_components as dbc
 from dash import dcc, html
 
 
@@ -11,13 +10,12 @@ def content():
             html.Div(
                 id="selected-site-info",
                 children="Click on a site marker to view information",
-                style={"border": "1px solid #ccc", "padding": "10px"},
+                style={"border": "1px solid #ccc", "padding": "10px", "marginBottom": "1rem"},
             ),
-            dbc.Row(
-                [
-                    dbc.Col(dcc.Graph(id="locations-wind-rose", figure={}), width=6),
-                    dbc.Col(dcc.Graph(id="locations-monthly-rainfall", figure={}), width=6),
-                ]
+            html.Div(
+                id="site-activity-panel",
+                children="",
+                style={"border": "1px solid #ccc", "padding": "10px"},
             ),
         ]
     )

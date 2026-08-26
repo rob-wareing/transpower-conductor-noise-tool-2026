@@ -3,8 +3,11 @@ from transpower_conductor_noise_tool_2026.backend.persistence.models.outage impo
 
 
 class OutageRepository:
-    def list_outages(self):
-        return Outage.query.order_by(Outage.start_datetime.desc()).all()
+    def list_outages(self, noise_site_id=None):
+        query = Outage.query
+        if noise_site_id is not None:
+            query = query.filter(Outage.noise_site_id == noise_site_id)
+        return query.order_by(Outage.start_datetime.desc()).all()
 
     def find_by_id(self, outage_id):
         return db.session.get(Outage, outage_id)

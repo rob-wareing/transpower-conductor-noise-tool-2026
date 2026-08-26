@@ -7,8 +7,11 @@ from transpower_conductor_noise_tool_2026.backend.persistence.models.reconductor
 
 
 class ReconductoringRepository:
-    def list_events(self):
-        return Reconductoring.query.order_by(Reconductoring.reconductoring_date.desc()).all()
+    def list_events(self, noise_site_id=None):
+        query = Reconductoring.query
+        if noise_site_id is not None:
+            query = query.filter(Reconductoring.noise_site_id == noise_site_id)
+        return query.order_by(Reconductoring.reconductoring_date.desc()).all()
 
     def latest_by_site(self):
         # {noise_site_id: most recent reconductoring_date} - only sites with

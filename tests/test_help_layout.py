@@ -5,38 +5,40 @@ def _rendered_text(component):
     return repr(component)
 
 
-def test_content_includes_all_four_subheadings():
+def test_content_includes_every_sub_tab_label():
     text = _rendered_text(help_layout.content())
 
-    for subheading in ["Detection Logic", "Historical Data", "Wind Roses", "Site Location"]:
-        assert subheading in text
+    for label, _filename in help_layout.SUB_TABS:
+        assert label in text
 
 
-def test_content_describes_each_feature():
+def test_content_renders_each_sub_tabs_markdown_file_content():
     text = _rendered_text(help_layout.content())
 
-    assert "Updated 2026" in text
-    assert "16 direction sectors" in text
-    assert "total monthly rainfall" in text
+    for _label, filename in help_layout.SUB_TABS:
+        path = help_layout.MARKDOWN_DIR / filename
+        assert path.exists(), f"missing markdown file: {filename}"
+        # A couple of words from each file's own content, not the whole
+        # (multi-paragraph) file, to keep this robust to future wording edits.
+        first_line = path.read_text().splitlines()[0]
+        assert first_line in text
 
 
-def test_detection_logic_table_has_the_expected_columns_and_rows():
-    text = _rendered_text(help_layout.content())
+def test_detection_logic_markdown_includes_the_comparison_table():
+    content = (help_layout.MARKDOWN_DIR / "detection_logic.md").read_text()
 
     for column in ["Criteria", "Original", "Updated 2026"]:
-        assert column in text
-
-    for criteria, _pre_2026, _updated in help_layout.DETECTION_LOGIC_CRITERIA:
-        assert criteria in text
+        assert column in content
+    assert "Line status" in content
 
 
-def test_detection_logic_table_marks_line_status_as_live_only_in_updated():
-    criteria_by_name = {
-        criteria: (pre_2026, updated)
-        for criteria, pre_2026, updated in help_layout.DETECTION_LOGIC_CRITERIA
-    }
+def test_load_markdown_returns_placeholder_message_for_missing_file():
+    text = help_layout._load_markdown("does-not-exist.md")
 
-    pre_2026, updated = criteria_by_name["Line status"]
+    assert "does-not-exist.md" in text
 
-    assert updated == "Live"
-    assert pre_2026 != "Live"
+
+def test_sub_tab_id_is_unique_per_file():
+    ids = [help_layout._sub_tab_id(filename) for _label, filename in help_layout.SUB_TABS]
+
+    assert len(ids) == len(set(ids))

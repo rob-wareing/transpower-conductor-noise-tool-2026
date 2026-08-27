@@ -178,7 +178,7 @@ def register_callbacks(dash_app, backend_url: str | None):
             center = DEFAULT_CENTER
 
         figure = go.Figure(
-            go.Scattermapbox(
+            go.Scattermap(
                 lat=[s.latitude for s in located],
                 lon=[s.longitude for s in located],
                 mode="markers",
@@ -190,7 +190,7 @@ def register_callbacks(dash_app, backend_url: str | None):
             )
         )
         figure.update_layout(
-            mapbox=dict(style="open-street-map", center=center, zoom=8),
+            map=dict(style="open-street-map", center=center, zoom=8),
             height=600,
             clickmode="event+select",
             title="Noise Monitoring Site Locations",

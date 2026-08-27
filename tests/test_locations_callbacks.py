@@ -81,7 +81,7 @@ def test_populate_locations_map_centers_on_mean_of_located_sites(fake_client):
     )
 
     figure = output_value(response, "locations-map", "figure")
-    center = figure["layout"]["mapbox"]["center"]
+    center = figure["layout"]["map"]["center"]
     assert center == {"lat": -41.0, "lon": 175.0}
 
 
@@ -97,7 +97,7 @@ def test_populate_locations_map_falls_back_to_default_center_when_no_sites_locat
 
     figure = output_value(response, "locations-map", "figure")
     assert figure["data"][0]["lat"] == []
-    assert figure["layout"]["mapbox"]["center"] == locations_callbacks.DEFAULT_CENTER
+    assert figure["layout"]["map"]["center"] == locations_callbacks.DEFAULT_CENTER
 
 
 def test_populate_locations_map_handles_no_backend():
@@ -111,7 +111,7 @@ def test_populate_locations_map_handles_no_backend():
 
     figure = output_value(response, "locations-map", "figure")
     assert figure["data"][0]["lat"] == []
-    assert figure["layout"]["mapbox"]["center"] == locations_callbacks.DEFAULT_CENTER
+    assert figure["layout"]["map"]["center"] == locations_callbacks.DEFAULT_CENTER
 
 
 # --- display_selected_site -------------------------------------------------

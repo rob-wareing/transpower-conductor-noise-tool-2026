@@ -179,19 +179,20 @@ sudo mkdir -p /var/log/conductor-noise
 sudo chown $USER:$USER /var/log/conductor-noise
 ```
 
-`flock -n` skips a run entirely (rather than queuing) if the previous run of the *same* job is still going — cheap insurance against a slow ingestion run overlapping with itself, not against the three different jobs overlapping each other (handled instead by staggering their start times below).
+`flock -n` skips a run entirely (rather than queuing) if the previous run of the *same* job is still going — cheap insurance against a slow ingestion run overlapping with itself, not against different jobs overlapping each other (handled instead by staggering their start times below).
 
-Add to the deploy user's crontab (`crontab -e`), staggered so ingestion has time to finish before the two regenerations read its output:
+Add to the deploy user's crontab (`crontab -e`), staggered so ingestion has time to finish before the five regenerations that follow it read its output:
 
 ```cron
 0 2 * * *  /opt/transpower-conductor-noise-tool-2026/cron/run.sh ingest "docker compose -f docker-compose.prod.yml --profile ingestion run --rm ingest"
-30 2 * * * /opt/transpower-conductor-noise-tool-2026/cron/run.sh conductor-summary "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_conductor_summary.py"
-45 2 * * * /opt/transpower-conductor-noise-tool-2026/cron/run.sh rain-rate-fits "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_rain_rate_fits.py"
+40 2 * * * /opt/transpower-conductor-noise-tool-2026/cron/run.sh conductor-summary "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_conductor_summary.py"
+50 2 * * * /opt/transpower-conductor-noise-tool-2026/cron/run.sh rain-rate-fits "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_rain_rate_fits.py"
 55 2 * * * /opt/transpower-conductor-noise-tool-2026/cron/run.sh reconductoring-age "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/calculate_reconductoring_age.py"
 5 3 * * *  /opt/transpower-conductor-noise-tool-2026/cron/run.sh conductor-age-fits "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_conductor_age_fits.py"
+15 3 * * * /opt/transpower-conductor-noise-tool-2026/cron/run.sh reading-availability "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_reading_availability.py"
 ```
 
-`reconductoring-age` must run after `ingest` (new processed_reading rows need an age computed) but has no dependency on `conductor-summary`/`rain-rate-fits` - it's staggered after them here purely to keep the whole chain simple, not because of an ordering requirement. `conductor-age-fits` mirrors `rain-rate-fits`'s own relationship to `generate_conductor_summary.py`: it must run after `reconductoring-age` (the fit reads that column) - see backend/domain/trends_service.py's Age effects tab.
+`reconductoring-age` must run after `ingest` (new processed_reading rows need an age computed) but has no dependency on `conductor-summary`/`rain-rate-fits` - it's staggered after them here purely to keep the whole chain simple, not because of an ordering requirement. `conductor-age-fits` mirrors `rain-rate-fits`'s own relationship to `generate_conductor_summary.py`: it must run after `reconductoring-age` (the fit reads that column) - see backend/domain/trends_service.py's Age effects tab. `reading-availability` has no dependency on any of the others either (like `reconductoring-age`, it only needs `ingest`'s raw-row upsert done) - placed last in the daily chain for the same simplicity reason, not an ordering requirement. (`conductor-summary`/`rain-rate-fits` run at :40/:50 rather than the round :30/:45 they were originally set up with - drifted slightly during initial setup; harmless, just documented here to match what's actually in the crontab.)
 
 If ingestion regularly takes longer than 30 minutes, push the later jobs back further — check `/var/log/conductor-noise/ingest.log` after the first few real runs and adjust.
 
@@ -199,7 +200,7 @@ If ingestion regularly takes longer than 30 minutes, push the later jobs back fu
 
 `wind_rose`, `monthly_rainfall`, and `monthly_weather_stats` are precomputed from the raw `reading` table's full history, each at (site, year, month) granularity (site-level wind rose, monthly rainfall, and monthly min/max/avg rain+wind, shown on the Weather tab for a selected site and date range) via a single set-based SQL aggregation each (`ReadingRepository.aggregate_wind_rose`/`aggregate_monthly_rainfall`/`aggregate_monthly_weather_stats`), not the pandas-based approach the daily `conductor-summary`/`rain-rate-fits` jobs above use — `reading` is a ~2.4M-row table, too large to pull wholesale into pandas the way those two jobs do against the much smaller `processed_reading` table. All three are cheap enough, and change slowly enough, to regenerate weekly rather than daily.
 
-Reuses the same `cron/run.sh` wrapper as the daily jobs above (no new infra needed). Add to the deploy user's crontab (`crontab -e`), clear of the daily jobs' latest possible finish (now `conductor-age-fits` at 3:05am) and staggered from each other:
+Reuses the same `cron/run.sh` wrapper as the daily jobs above (no new infra needed). Add to the deploy user's crontab (`crontab -e`), clear of the daily jobs' latest possible finish (now `reading-availability` at 3:15am) and staggered from each other:
 
 ```cron
 30 3 * * 0 /opt/transpower-conductor-noise-tool-2026/cron/run.sh wind-rose "docker compose -f docker-compose.prod.yml run --rm db-migrate python scripts/generate_wind_rose.py"

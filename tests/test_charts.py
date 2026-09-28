@@ -442,6 +442,39 @@ def test_charts_endpoint_conductor_and_treatment_filter_splits_trace_name(tmp_pa
     assert "Standard conductor (standard grease)" in traces[0]["name"]
 
 
+def test_charts_endpoint_hover_includes_count_and_conductor_rows(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/api/charts", json={"noise_site_id": [51], "interval_weeks": 2}
+    )
+
+    trace = response.get_json()["noise_chart"]["data"][0]
+    assert "Count: %{customdata[0]}" in trace["hovertemplate"]
+    assert "Conductor: %{customdata[1]}" in trace["hovertemplate"]
+    # One [count, conductor] pair per plotted point; site 51's 50 readings
+    # are all averaged into those points, so the counts add back up to 50.
+    assert len(trace["customdata"]) == len(trace["x"])
+    assert sum(int(count) for count, _conductor in trace["customdata"]) == 50
+    # Every reading postdates site 51's single reconductoring event; the
+    # label is "<conductor_and_treatment> (<grease>)".
+    assert {conductor for _count, conductor in trace["customdata"]} == {
+        "Standard conductor (standard grease) (standard)"
+    }
+
+
+def test_charts_endpoint_hover_shows_dash_count_for_historical_points(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/api/charts", json={"noise_site_id": [115], "show_historical": True}
+    )
+
+    historical_trace = response.get_json()["noise_chart"]["data"][0]
+    assert historical_trace["opacity"] == 0.5
+    assert {count for count, _conductor in historical_trace["customdata"]} == {"-"}
+
+
 def test_charts_endpoint_conductor_and_treatment_filter_excludes_unmatched_sites(
     tmp_path, monkeypatch
 ):

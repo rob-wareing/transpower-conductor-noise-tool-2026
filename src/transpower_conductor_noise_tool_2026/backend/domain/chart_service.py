@@ -70,6 +70,8 @@ BUCKETED_COLUMNS = [
     "tone_200hz",
     "linestyle",
     "is_historical",
+    "event_count",
+    "conductor_label",
 ]
 # Matches trends_service.SITE_COLOR_PALETTE - explicit per-site cycling
 # (rather than Plotly's own implicit per-trace auto-coloring) so a site's
@@ -265,6 +267,18 @@ def _shift_sparse_buckets_forward(df):
     return df
 
 
+def _conductor_label(conductor_and_treatment, grease):
+    # "Conductor and treatment (Grease)" as shown in the chart hover text;
+    # blank when a reading has no reconductoring event stamped on it.
+    conductor_and_treatment = conductor_and_treatment or ""
+    grease = grease or ""
+    if conductor_and_treatment and grease:
+        return f"{conductor_and_treatment} ({grease})"
+    if grease:
+        return f"({grease})"
+    return conductor_and_treatment
+
+
 def _bucket_readings(df, interval_weeks, group_by_conductor):
     empty = pd.DataFrame(columns=BUCKETED_COLUMNS)
     if df.empty:
@@ -280,6 +294,10 @@ def _bucket_readings(df, interval_weeks, group_by_conductor):
         working["datetime"] + interval - ((working["datetime"] - epoch) % interval)
     )
     working = _shift_sparse_buckets_forward(working)
+    working["conductor_label"] = [
+        _conductor_label(conductor, grease)
+        for conductor, grease in zip(working["conductor_and_treatment"], working["grease"])
+    ]
 
     group_columns = ["noise_site_id", "aggregate_date"]
     if group_by_conductor:
@@ -292,6 +310,13 @@ def _bucket_readings(df, interval_weeks, group_by_conductor):
     # the first (earliest) row's already-stamped value, same as site_name, is
     # an approximation an interval_weeks-coarsened bucket inherently accepts.
     aggregated["linestyle"] = grouped["linestyle"].first()
+    # Hover-text extras: how many readings were averaged into the point, and
+    # which conductor/treatment applied. An ungrouped bucket can straddle a
+    # reconductoring date, so distinct labels are all listed (in row order).
+    aggregated["event_count"] = grouped.size()
+    aggregated["conductor_label"] = grouped["conductor_label"].agg(
+        lambda labels: " / ".join(dict.fromkeys(label for label in labels if label))
+    )
     if group_by_conductor:
         aggregated["reconductoring_date"] = grouped["reconductoring_date"].first()
     aggregated = aggregated.reset_index().rename(columns={"aggregate_date": "datetime"})
@@ -357,6 +382,14 @@ def _historical_dataframe(filters: ChartFilters, sites_by_id, historical_reposit
         historical_df, filters.conductor_and_treatment, filters.grease
     )
     historical_df["is_historical"] = True
+    # A manually surveyed historical point has no per-reading breakdown.
+    historical_df["event_count"] = None
+    historical_df["conductor_label"] = [
+        _conductor_label(conductor, grease)
+        for conductor, grease in zip(
+            historical_df["conductor_and_treatment"], historical_df["grease"]
+        )
+    ]
     return historical_df[BUCKETED_COLUMNS]
 
 
@@ -400,6 +433,19 @@ def _contiguous_runs(df, columns):
     return runs
 
 
+def _hover_customdata(run_df):
+    # One [count, conductor] pair per point, pre-formatted as strings so a
+    # missing value (historical points have no count; readings with no
+    # reconductoring event have no conductor) shows a dash, not "undefined".
+    return [
+        [
+            "-" if pd.isna(count) else str(int(count)),
+            label or "-",
+        ]
+        for count, label in zip(run_df["event_count"], run_df["conductor_label"])
+    ]
+
+
 def _build_noise_chart(
     df, parameter, plot_by, group_by_conductor, historical_colors, title_override=None
 ):
@@ -433,6 +479,12 @@ def _build_noise_chart(
                 if conductor_and_treatment:
                     name = f"{name} ({conductor_and_treatment})"
 
+            x_title = PLOT_BY_AXIS_TITLES.get(plot_by, "Date")
+            hovertemplate = (
+                f"{x_title}: %{{x}}<br>{parameter}: %{{y}}"
+                "<br>Count: %{customdata[0]}<br>Conductor: %{customdata[1]}"
+                "<extra>%{fullData.name}</extra>"
+            )
             base_color = site_colors[site_id]
             historical_color = historical_colors.get(site_id) or base_color
             legend_group = f"site-{'-'.join(str(part) for part in key)}"
@@ -451,6 +503,8 @@ def _build_noise_chart(
                         # this API expects.
                         x=run_df[plot_by].tolist(),
                         y=run_df[parameter].tolist(),
+                        customdata=_hover_customdata(run_df),
+                        hovertemplate=hovertemplate,
                         mode="lines+markers",
                         name=name,
                         legendgroup=legend_group,

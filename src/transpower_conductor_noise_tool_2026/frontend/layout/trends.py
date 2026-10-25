@@ -158,6 +158,13 @@ def _conductor_summary_panel():
             dcc.Interval(
                 id="trends-conductor-summary-init", interval=1000, n_intervals=0, max_intervals=1
             ),
+            html.P(
+                "Care should be taken interpreting the levels presented below. Noise monitors "
+                "are located at different locations with different heights, and as such not "
+                "all comparisons are directly applicable.",
+                className="text-muted",
+                style={"marginTop": "1rem"},
+            ),
             html.Div(
                 [
                     html.Div(

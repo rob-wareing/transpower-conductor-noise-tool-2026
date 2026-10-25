@@ -294,6 +294,7 @@ def content(write_access: bool = False):
             ),
             dcc.Graph(id="noise-chart"),
             html.H4("Data Availability Timeline"),
+            html.P("Excludes historical data", className="text-muted"),
             dcc.Graph(id="timeline-chart"),
             html.Div(
                 [

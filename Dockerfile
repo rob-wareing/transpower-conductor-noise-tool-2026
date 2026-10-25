@@ -18,4 +18,4 @@ RUN pip install --upgrade pip && pip install .
 
 EXPOSE 5000
 
-CMD ["gunicorn", "wsgi:app", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "--timeout", "120"]
+CMD ["gunicorn", "wsgi:app", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "16", "--timeout", "120"]

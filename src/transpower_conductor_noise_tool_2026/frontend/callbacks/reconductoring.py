@@ -36,7 +36,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("reconductoring-init", "n_intervals"),
         Input("reconductoring-status", "children"),
     )
-    def refresh_reconductoring_table(_n_intervals, _status):
+    def refresh_reconductoring_table(n_intervals, _status):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         if client is None:
             return []
         rows = []

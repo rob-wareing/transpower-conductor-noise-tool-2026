@@ -28,7 +28,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("sites-init", "n_intervals"),
         Input("sites-status", "children"),
     )
-    def refresh_sites_table(_n_intervals, _status):
+    def refresh_sites_table(n_intervals, _status):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         if client is None:
             return []
         # Ignored sites must still be listed here (and only here) so they

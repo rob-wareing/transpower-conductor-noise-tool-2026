@@ -21,7 +21,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("historical-init", "n_intervals"),
         Input("historical-status", "children"),
     )
-    def refresh_historical_table(_n_intervals, _status):
+    def refresh_historical_table(n_intervals, _status):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         if client is None:
             return []
         return [result.model_dump(mode="json") for result in client.get_historical_results()]

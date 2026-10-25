@@ -17,7 +17,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Output("outages-table", "dropdown"),
         Input("outages-init", "n_intervals"),
     )
-    def populate_outage_type_options(_n_intervals):
+    def populate_outage_type_options(n_intervals):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         if client is None:
             return {}
         options = [{"label": t, "value": t} for t in client.get_outage_types()]
@@ -28,7 +32,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("outages-init", "n_intervals"),
         Input("outages-status", "children"),
     )
-    def refresh_outages_table(_n_intervals, _status):
+    def refresh_outages_table(n_intervals, _status):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         if client is None:
             return []
         return [outage.model_dump(mode="json") for outage in client.get_outages()]

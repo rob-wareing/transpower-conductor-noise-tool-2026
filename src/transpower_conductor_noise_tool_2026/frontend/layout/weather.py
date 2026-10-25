@@ -52,7 +52,13 @@ def _month_year_picker(label, month_id, year_id):
 def content():
     return html.Div(
         [
-            dcc.Interval(id="weather-init", interval=1000, n_intervals=0, max_intervals=1),
+            dcc.Interval(
+                id="weather-init",
+                interval=100,
+                n_intervals=0,
+                max_intervals=1,
+                disabled=True,
+            ),
             html.Div(
                 [
                     html.Label("Sites"),

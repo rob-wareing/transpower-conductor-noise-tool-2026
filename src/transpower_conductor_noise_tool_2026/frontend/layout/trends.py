@@ -84,7 +84,11 @@ def _rain_rate_vs_level_panel():
     return html.Div(
         [
             dcc.Interval(
-                id="trends-rain-rate-init", interval=1000, n_intervals=0, max_intervals=1
+                id="trends-rain-rate-init",
+                interval=100,
+                n_intervals=0,
+                max_intervals=1,
+                disabled=True,
             ),
             html.Div(
                 [
@@ -156,7 +160,11 @@ def _conductor_summary_panel():
     return html.Div(
         [
             dcc.Interval(
-                id="trends-conductor-summary-init", interval=1000, n_intervals=0, max_intervals=1
+                id="trends-conductor-summary-init",
+                interval=100,
+                n_intervals=0,
+                max_intervals=1,
+                disabled=True,
             ),
             html.P(
                 "Care should be taken interpreting the levels presented below. Noise monitors "
@@ -225,7 +233,11 @@ def _age_effects_panel():
     return html.Div(
         [
             dcc.Interval(
-                id="trends-age-effects-init", interval=1000, n_intervals=0, max_intervals=1
+                id="trends-age-effects-init",
+                interval=100,
+                n_intervals=0,
+                max_intervals=1,
+                disabled=True,
             ),
             html.Div(
                 [
@@ -290,7 +302,9 @@ def content():
                 className="text-muted",
             ),
             dbc.Tabs(
-                [
+                id="trends-tabs",
+                active_tab=RAIN_RATE_VS_LEVEL_TAB_ID,
+                children=[
                     dbc.Tab(
                         _rain_rate_vs_level_panel(),
                         label="Rain rate vs level",

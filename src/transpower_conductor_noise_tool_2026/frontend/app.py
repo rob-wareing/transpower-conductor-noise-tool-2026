@@ -11,6 +11,7 @@ from .callbacks.locations import register_callbacks as register_locations_callba
 from .callbacks.outages import register_callbacks as register_outage_callbacks
 from .callbacks.reconductoring import register_callbacks as register_reconductoring_callbacks
 from .callbacks.sites import register_callbacks as register_site_callbacks
+from .callbacks.tab_loading import register_callbacks as register_tab_loading_callbacks
 from .callbacks.trends import register_callbacks as register_trends_callbacks
 from .callbacks.weather import register_callbacks as register_weather_callbacks
 from .client import BackendClient
@@ -135,6 +136,7 @@ def create_dashboard(server=None, backend_url=None):
                 dbc.Tab(weather_layout.content(), label="Weather", tab_id="weather"),
                 dbc.Tab(help_layout.content(), label="Help", tab_id="help"),
             ],
+            id="main-tabs",
             active_tab="charts",
         )
 
@@ -172,4 +174,5 @@ def create_dashboard(server=None, backend_url=None):
     register_locations_callbacks(dash_app, backend_url)
     register_trends_callbacks(dash_app, backend_url)
     register_weather_callbacks(dash_app, backend_url)
+    register_tab_loading_callbacks(dash_app)
     return dash_app

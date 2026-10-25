@@ -1,5 +1,5 @@
 import plotly.graph_objects as go
-from dash import Input, Output
+from dash import Input, Output, no_update
 
 from ..client import BackendClient
 from .locations import _build_monthly_rainfall_figure, _build_wind_rose_figure, _empty_figure
@@ -49,7 +49,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Output("weather-site-select", "options"),
         Input("weather-init", "n_intervals"),
     )
-    def populate_weather_site_options(_n_intervals):
+    def populate_weather_site_options(n_intervals):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         if client is None:
             return []
 

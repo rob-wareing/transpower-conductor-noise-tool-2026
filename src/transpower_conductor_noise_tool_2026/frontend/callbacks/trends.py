@@ -1,5 +1,5 @@
 import dash
-from dash import Input, Output, State
+from dash import Input, Output, State, no_update
 
 from transpower_conductor_noise_tool_2026.shared.contracts import (
     AgeEffectsFilters,
@@ -50,7 +50,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Output("trends-rain-rate-site-select", "value"),
         Input("trends-rain-rate-init", "n_intervals"),
     )
-    def populate_rain_rate_site_options(_n_intervals):
+    def populate_rain_rate_site_options(n_intervals):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update, no_update
         if client is None:
             return [], []
 
@@ -89,8 +93,12 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("trends-rain-rate-hide-data-button", "n_clicks"),
     )
     def refresh_rain_rate_chart(
-        _n_intervals, detection_logic, metric, site_ids, include_dry, hide_data_n_clicks
+        n_intervals, detection_logic, metric, site_ids, include_dry, hide_data_n_clicks
     ):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         empty_figure = {"data": [], "layout": {}}
         if client is None:
             return empty_figure
@@ -111,7 +119,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Output("trends-conductor-summary-site-select", "value"),
         Input("trends-conductor-summary-init", "n_intervals"),
     )
-    def populate_conductor_summary_site_options(_n_intervals):
+    def populate_conductor_summary_site_options(n_intervals):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update, no_update
         if client is None:
             return [], []
 
@@ -142,8 +154,12 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("trends-conductor-summary-site-select", "value"),
     )
     def refresh_conductor_summary_chart(
-        _n_intervals, metric, detection_logic, measurement_duration_minutes, site_ids
+        n_intervals, metric, detection_logic, measurement_duration_minutes, site_ids
     ):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         empty_figure = {"data": [], "layout": {}}
         if client is None:
             return empty_figure
@@ -161,7 +177,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Output("trends-age-effects-site-select", "value"),
         Input("trends-age-effects-init", "n_intervals"),
     )
-    def populate_age_effects_site_options(_n_intervals):
+    def populate_age_effects_site_options(n_intervals):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update, no_update
         if client is None:
             return [], []
 
@@ -199,8 +219,12 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("trends-age-effects-hide-data-button", "n_clicks"),
     )
     def refresh_age_effects_chart(
-        _n_intervals, detection_logic, metric, site_ids, hide_data_n_clicks
+        n_intervals, detection_logic, metric, site_ids, hide_data_n_clicks
     ):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         empty_figure = {"data": [], "layout": {}}
         if client is None:
             return empty_figure

@@ -26,7 +26,11 @@ def content(write_access: bool = False):
     return html.Div(
         [
             dcc.Interval(
-                id="reconductoring-init", interval=1000, n_intervals=0, max_intervals=1
+                id="reconductoring-init",
+                interval=100,
+                n_intervals=0,
+                max_intervals=1,
+                disabled=True,
             ),
             dash_table.DataTable(
                 id="reconductoring-table",

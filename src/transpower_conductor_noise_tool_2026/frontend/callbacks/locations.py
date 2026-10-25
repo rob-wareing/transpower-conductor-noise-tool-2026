@@ -1,5 +1,5 @@
 import plotly.graph_objects as go
-from dash import Input, Output, html
+from dash import Input, Output, html, no_update
 
 from ..client import BackendClient
 
@@ -165,7 +165,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Output("locations-map", "figure"),
         Input("locations-init", "n_intervals"),
     )
-    def populate_locations_map(_n_intervals):
+    def populate_locations_map(n_intervals):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         sites = client.get_site_details() if client else []
         located = [s for s in sites if s.latitude is not None and s.longitude is not None]
 

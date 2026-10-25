@@ -4,7 +4,13 @@ from dash import dcc, html
 def content():
     return html.Div(
         [
-            dcc.Interval(id="locations-init", interval=1000, n_intervals=0, max_intervals=1),
+            dcc.Interval(
+                id="locations-init",
+                interval=100,
+                n_intervals=0,
+                max_intervals=1,
+                disabled=True,
+            ),
             dcc.Graph(id="locations-map", figure={}, style={"height": "600px"}),
             html.H4("Selected Site Information"),
             html.Div(

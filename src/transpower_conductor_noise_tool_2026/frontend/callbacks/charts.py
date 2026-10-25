@@ -29,7 +29,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Output("chart-site-select", "value"),
         Input("chart-init", "n_intervals"),
     )
-    def populate_site_options(_n_intervals):
+    def populate_site_options(n_intervals):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update, no_update
         if client is None:
             return [], []
 
@@ -64,7 +68,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Output("chart-reconductoring-events-store", "data"),
         Input("chart-init", "n_intervals"),
     )
-    def populate_reconductoring_events_store(_n_intervals):
+    def populate_reconductoring_events_store(n_intervals):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         # Fetched once per page load and shared by both dropdowns below,
         # instead of each independently calling client.get_reconductoring_events()
         # (previously two identical HTTP round trips on every default load).
@@ -124,7 +132,7 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("chart-show-historical", "value"),
     )
     def refresh_charts(
-        _n_intervals,
+        n_intervals,
         site_ids,
         start_date,
         end_date,
@@ -138,6 +146,10 @@ def register_callbacks(dash_app, backend_url: str | None):
         detection_logic,
         show_historical,
     ):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         empty_figure = {"data": [], "layout": {}}
         if client is None:
             return empty_figure
@@ -163,7 +175,11 @@ def register_callbacks(dash_app, backend_url: str | None):
         Output("timeline-chart", "figure"),
         Input("chart-init", "n_intervals"),
     )
-    def refresh_chart_timeline(_n_intervals):
+    def refresh_chart_timeline(n_intervals):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         # Deliberately the ONLY Input - the Data Availability Timeline must
         # not change based on any Charts tab filter (site, date, condition,
         # conductor/grease, detection_logic, show_historical). See
@@ -197,7 +213,7 @@ def register_callbacks(dash_app, backend_url: str | None):
         Input("chart-table-collapse", "is_open"),
     )
     def refresh_chart_table(
-        _n_intervals,
+        n_intervals,
         site_ids,
         start_date,
         end_date,
@@ -209,6 +225,10 @@ def register_callbacks(dash_app, backend_url: str | None):
         detection_logic,
         is_open,
     ):
+        # Dash also runs this on the initial render (n_intervals=0); only load
+        # once the tab's init interval has actually fired - see tab_loading.py.
+        if not n_intervals:
+            return no_update
         # The table is collapsed by default - skip the fetch entirely until
         # the user actually opens it, instead of duplicating the figures
         # endpoint's full fetch/pipeline on every page load regardless.

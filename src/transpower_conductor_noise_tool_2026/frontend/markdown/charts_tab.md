@@ -5,10 +5,13 @@ The charts tab contains the following:
 **Options:** Controls the data shown in the plot area and the data table.
 
 **Plot area:** Displays the selected parameter against either date/time or time since reconductoring. The plot area can be zoomed in and out, and the data can be downloaded as a CSV file.
+![Alt text](./gifs/charts_plot_export.gif "Charts Plot Area Export")
 
 **Data Availability Timeline**: Shows the availability of data for the selected sites over time.
 
 **Data table:** Displays the underlying raw readings for the selected sites and filters - this is collapsed by default, press *Expand table* to view. Can be exported to CSV.
+
+![Alt text](./gifs/charts_table_export.png "Charts Table Export")
 
 
 ## Options
@@ -35,24 +38,35 @@ The charts tab contains the following:
 
 ## Chart
 
-**Hover**: Hovering over a point will display the details of that point. 
+**Hover**: Hovering over a point will display the details of that point.
+![Alt text](./gifs/charts_plot_hover.gif "Charts Hover")
 
 **Hide/Show**: The legend can be used to hide or show a site by clicking on the site name in the legend.
 
-**Axis Resizing**: The axes can be resized by clicking and dragging the axis labels. 
+**Axis Resizing**: The axes can be resized by clicking and dragging the axis labels.
+![Alt text](./gifs/charts_plot_axis.gif "Charts Axis Resizing")
 
-**Zoom**: The plot area can be zoomed in and out by clicking and dragging a box around the area of interest. To reset the zoom, click the *Reset Axis* button in the top right corner of the chart.
+**Zoom**: The plot area can be zoomed in and out by clicking and dragging a box around the area of interest.
+![Alt text](./gifs/charts_plot_zoom.gif "Charts Zoom")
+
+To reset the zoom, click the *Reset Axis* button in the top right corner of the chart.
+![Alt text](./gifs/charts_plot_reset.gif "Charts Reset Axis")
+
 
 **Save as image:** The chart can be saved as an image by clicking the *Save as PNG* button in the top right corner of the chart.
+![Alt text](./gifs/charts_plot_screenshot.gif "Charts Plot Area Export")
+
 
 ## Adjust data series colour and style
 The colour of each line in the chart can be changed using the "Plot colour" column on the Sites tab. All conductors for the site are presented as the same colour line.
+![Alt text](./gifs/charts_plot_line_color.gif "Charts Sites Tab Plot Colour")
 
 You can select a different colour for historical data by using the "Historical line colour" column on the Sites tab. All historical data for the site are presented as the same colour line but is slightly transparent.
 
 You can find a colour picker tool here: [https://www.w3schools.com/colors/colors_picker.asp](https://www.w3schools.com/colors/colors_picker.asp)
 
 You can also change the line style for each reconductored site using the "Line style" column on the Reconductoring tab. Line style options include: 'solid', 'dot', 'dash', 'longdash', 'dashdot' and 'longdashdot'.
+![Alt text](./gifs/charts_plot_line_style.gif "Charts Reconductoring Tab Line Style")
 
 
 ## Data Availability Timeline
@@ -60,4 +74,7 @@ This is a static chart and shows the availability of data for the selected sites
 
 
 ### Data Table
-Pressing *Expand table* will display the underlying raw readings for the selected sites and filters. The data table can be exported to CSV by pressing the *Export CSV* button in the top right corner of the data table.
+Pressing *Expand table* will display the underlying raw readings for the selected sites and filters.
+
+The data table can be exported to CSV by pressing the *Export CSV* button in the top right corner of the data table.
+![Alt text](./gifs/charts_table_export.gif "Charts Data Table Export")

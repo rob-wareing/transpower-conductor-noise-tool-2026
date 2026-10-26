@@ -3,6 +3,12 @@
 The Outages, Reconductoring, and Historical tabs are all editable tables (add,
 edit, and delete rows, with write access), each with CSV export.
 
+Data can be manually added to each of these tables if the user has write access.
+![Alt text](./gifs/outages_modify.gif "Other Table Tabs Add")
+
+After entering data press the *Save* button to commit the changes to the table.
+![Alt text](./gifs/outages_save.gif "Other Table Tabs Save")
+
 ## Outages
 Logged periods when a site's monitoring was known to be down or 
 corrupted; readings taken during a logged outage are excluded from charts.

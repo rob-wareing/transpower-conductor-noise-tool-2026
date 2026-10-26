@@ -91,6 +91,11 @@ def create_dashboard(server=None, backend_url=None):
         assets_folder=str(Path(__file__).resolve().parent / "assets"),
     )
     dash_app.config.suppress_callback_exceptions = True
+
+    @dash_app.server.get(f"{help_layout.HELP_MEDIA_URL}<path:filename>")
+    def help_media(filename):
+        return flask.send_from_directory(help_layout.HELP_MEDIA_DIR, filename)
+
     dash_app.layout = html.Div(
         [
             dcc.Location(id="url", refresh=True),

@@ -11,6 +11,14 @@ from dash import dcc, html
 # separate Dockerfile COPY line needed.
 MARKDOWN_DIR = Path(__file__).resolve().parent.parent / "markdown"
 
+# Images/GIFs referenced from the markdown files as ./gifs/<name> (relative,
+# so they still preview in an editor/GitHub). In the browser that relative
+# path resolves against the Dash page (/app/gifs/...), which Dash answers
+# with its own HTML page rather than the file - so app.py serves this folder
+# at HELP_MEDIA_URL and _load_markdown rewrites the links to point there.
+HELP_MEDIA_DIR = MARKDOWN_DIR / "gifs"
+HELP_MEDIA_URL = "/help/media/"
+
 # (sub-tab label, markdown filename) - order here is the order tabs render in.
 SUB_TABS = [
     ("General", "general.md"),
@@ -27,7 +35,7 @@ def _load_markdown(filename):
     path = MARKDOWN_DIR / filename
     if not path.exists():
         return f"_Missing markdown file: `{filename}`_"
-    return path.read_text()
+    return path.read_text().replace("](./gifs/", f"]({HELP_MEDIA_URL}")
 
 
 def _sub_tab_id(filename):

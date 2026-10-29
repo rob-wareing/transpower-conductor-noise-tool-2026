@@ -18,7 +18,7 @@ CONDITION_OPTIONS = [
 ]
 
 PARAMETER_OPTIONS = [
-    {"label": "Leq adjusted", "value": "leq_adj"},
+    {"label": "LAeq", "value": "leq_adj"},
     {"label": "100Hz tone", "value": "tone_100hz"},
     {"label": "200Hz tone", "value": "tone_200hz"},
 ]

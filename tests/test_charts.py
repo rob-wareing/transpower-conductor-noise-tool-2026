@@ -747,3 +747,11 @@ def test_charts_table_endpoint_outage_exclusion_is_scoped_to_its_own_site(tmp_pa
 
     assert response.status_code == 200
     assert len(response.get_json()["items"]) == 50
+
+
+def test_noise_chart_y_axis_titles_match_parameter_dropdown_labels():
+    from transpower_conductor_noise_tool_2026.backend.domain import chart_service
+    from transpower_conductor_noise_tool_2026.frontend.layout import charts as charts_layout
+
+    for option in charts_layout.PARAMETER_OPTIONS:
+        assert chart_service.PARAMETER_AXIS_TITLES[option["value"]] == option["label"]

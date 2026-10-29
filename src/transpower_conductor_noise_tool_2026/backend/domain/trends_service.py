@@ -35,7 +35,7 @@ SITE_COLOR_PALETTE = plotly.colors.qualitative.Plotly
 # the same three acoustic metrics.
 METRICS = ["l90", "tone_100hz", "tone_200hz"]
 METRIC_LABELS = {
-    "l90": "LAeq (adjusted)",
+    "l90": "LAeq",
     "tone_100hz": "Tone excess 100Hz",
     "tone_200hz": "Tone excess 200Hz",
 }

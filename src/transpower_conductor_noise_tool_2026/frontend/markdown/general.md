@@ -33,3 +33,9 @@ The ingestion and processing of the data is done in a series of steps, at differ
 |Wind rose| Aggregates the raw reading table into 16 compass-sector wind statistics (sample count, average speed) per (site, year, month). Backs the Weather tab's wind rose chart; a selected date range re-aggregates a subset of these rows rather than re-querying reading. | Weekly, Sunday, 03:30 |
 |Monthly rainfall| Aggregates raw reading into average and total rainfall per (site, year, month). Backs the Weather tab's monthly rainfall chart, same date-range re-aggregation approach as Wind rose. | Weekly, Sunday, 03:45 |
 |Monthly weather stats|Aggregates raw reading into min/max/average rainfall and wind speed per (site, year, month). Backs the Weather tab's date-range "monthly rainfall/wind speed range" charts (shaded min-max band plus mean line). | Weekly, Sunday, 04:00 |
+
+
+## Trend calculations
+
+Trends are calculated after the most recent conductoring, only new conductors are included.
+The conductor 'age' is calculated based on the time elapsed since the most recent reconductoring event.

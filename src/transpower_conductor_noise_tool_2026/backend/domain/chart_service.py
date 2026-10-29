@@ -80,6 +80,13 @@ BUCKETED_COLUMNS = [
 SITE_COLOR_PALETTE = plotly.colors.qualitative.Plotly
 HISTORICAL_OPACITY = 0.5
 PLOT_BY_AXIS_TITLES = {"datetime": "Date", "days_since_conductoring": "Days since conductoring"}
+# Display-only y-axis titles, matching the Charts tab Parameter dropdown labels;
+# any parameter not listed falls back to its raw column name.
+PARAMETER_AXIS_TITLES = {
+    "leq_adj": "LAeq",
+    "tone_100hz": "100Hz tone",
+    "tone_200hz": "200Hz tone",
+}
 DAYS_SINCE_GUARD_TITLE = (
     "Select a conductor/treatment or grease filter to plot by days since conductoring"
 )
@@ -518,7 +525,7 @@ def _build_noise_chart(
     figure.update_layout(
         title=title_override or "Noise readings over time",
         xaxis_title=PLOT_BY_AXIS_TITLES.get(plot_by, "Date"),
-        yaxis_title=parameter,
+        yaxis_title=PARAMETER_AXIS_TITLES.get(parameter, parameter),
         height=450,
     )
     return _figure_to_json(figure)

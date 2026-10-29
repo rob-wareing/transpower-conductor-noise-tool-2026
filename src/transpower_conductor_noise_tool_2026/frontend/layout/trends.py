@@ -16,7 +16,7 @@ MEASUREMENT_DURATION_OPTIONS = [
 ]
 
 METRIC_OPTIONS = [
-    {"label": "LAeq (adjusted)", "value": "l90"},
+    {"label": "LAeq", "value": "l90"},
     {"label": "100Hz tone", "value": "tone_100hz"},
     {"label": "200Hz tone", "value": "tone_200hz"},
 ]

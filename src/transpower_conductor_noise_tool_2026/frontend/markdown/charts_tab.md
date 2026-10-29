@@ -20,7 +20,7 @@ The charts tab contains the following:
 
 **Condition:**: Wet or dry conductor conditions. The default is all conditions.
 
-**Parameter**: The noise parameter to be plotted in the plot area and displayed in the data table. The default is Leq Adjusted.
+**Parameter**: The noise parameter to be plotted in the plot area and displayed in the data table. The default is LAeq.
 
 **Aggregation period**: The time period over which the events are aggregated. The default is 2 weeks.
 

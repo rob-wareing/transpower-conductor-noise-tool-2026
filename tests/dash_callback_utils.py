@@ -11,6 +11,8 @@ order, Output/Input/State wiring, prevent_initial_call, etc.) rather than a
 hand-extracted copy of its logic.
 """
 
+import re
+
 
 def _output_key(outputs):
     parts = [f"{component_id}.{prop}" for component_id, prop in outputs]
@@ -40,11 +42,14 @@ def _resolve_output_key(app, outputs, inputs):
     """
     exact = _output_key(outputs)
     if len(outputs) > 1:
-        # Multi-output callbacks don't currently collide with allow_duplicate
-        # siblings anywhere in this app; only single-output lookups need the
-        # extra disambiguation.
+        # A multi-output key gets "@<hash>" appended to each of its
+        # allow_duplicate outputs ("..a.x...b.y@<hash>.."), so compare keys
+        # with those suffixes stripped.
         if exact in app.callback_map:
             return exact
+        matches = [key for key in app.callback_map if re.sub(r"@[0-9a-f]+", "", key) == exact]
+        if len(matches) == 1:
+            return matches[0]
         raise KeyError(f"No registered callback found for outputs {outputs}")
 
     candidates = _candidate_keys(app, exact)

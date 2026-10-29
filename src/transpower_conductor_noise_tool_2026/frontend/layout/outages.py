@@ -2,7 +2,7 @@ import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
 
 from .table_columns_config import visible_column_defs
-from .table_styles import BOLD_LEFT_ALIGN_HEADER, EDITABLE_CELL_HIGHLIGHT
+from .table_styles import BOLD_LEFT_ALIGN_HEADER, EDITABLE_CELL_HIGHLIGHT, SAVE_ERROR_HIGHLIGHT
 
 COLUMN_DEFS = [
     ("Site ID", "noise_site_id", "numeric"),
@@ -43,9 +43,12 @@ def content(write_access: bool = False):
                 row_deletable=write_access,
                 editable=write_access,
                 sort_action="native",
-                style_data_conditional=EDITABLE_CELL_HIGHLIGHT,
+                style_data_conditional=EDITABLE_CELL_HIGHLIGHT + SAVE_ERROR_HIGHLIGHT,
                 style_header=BOLD_LEFT_ALIGN_HEADER,
             ),
+            # Ids of the rows the table was last loaded with, so a save only
+            # deletes rows the user removed (see callbacks/outages.py).
+            dcc.Store(id="outages-loaded-ids", data=[]),
             dbc.Button(
                 "Add row",
                 id="outages-add-row-button",

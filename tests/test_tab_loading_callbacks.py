@@ -151,8 +151,8 @@ def test_hidden_tab_init_interval_starts_disabled(layout_module, interval_id):
     [
         (
             "outages",
-            [("outages-table", "data")],
-            [("outages-init", "n_intervals", 0), ("outages-status", "children", "")],
+            [("outages-table", "data"), ("outages-loaded-ids", "data")],
+            [("outages-init", "n_intervals", 0)],
             "get_outages",
         ),
         (
